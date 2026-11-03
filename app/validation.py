@@ -28,6 +28,8 @@ def validate_operations(document, schema, manifest, output_dir):
         previous_end = end
         if any(not text.strip() for text in step["concept"].values()):
             raise AppError("All five concept fields must be non-empty strings.")
+        if not step["evidence"].strip():
+            raise AppError("Step evidence must be a non-empty string.")
         refs = step["source_frame_refs"]
         if len(set(refs)) != len(refs):
             raise AppError("Frame references must be unique within a step.")

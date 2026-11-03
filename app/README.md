@@ -21,14 +21,14 @@ Navide 本體、Muse CLI／Muse Code、Meta 模型與服務（包括 Muse Spark�
 
 本次 `real-smoke` 使用原始 14 秒 MP4，完整上傳，沒有截取時段、重編碼原影片或變速。手冊圖片實際做了抽幀、縮放至最寬 640 px、另存 JPEG；這些圖片不是作者提供的獨立完成證據。素材清單另有準備好的 `local_clip` 與其「僅轉碼」說明，不能套用為本次 `local_original` 輸入的處理紀錄。
 
-署名與處理差異可追溯至 repo 頂層 README「素材來源與授權」段（`selected[id=M1]`）；`evidence/real-smoke/manual.md` 為本次公開的執行產物（同目錄另有 operations、provider result、費用報告與 320px 影格；金鑰與 provider 私有 ID 已遮罩）。README 保留完整作者／授權資訊。
+署名與處理差異可追溯至素材清單（未公開）的 `selected[id=M1]` 及[真手冊來源段](evidence/real-smoke/manual.md)。README 保留完整作者／授權資訊；模型輸出內容及既有 run 不因這次文件補充而改動。
 
 ## 安裝
 
 Python >=3.11，FFmpeg/ffprobe 8.x。開發機確認有 Python 3.14.7、FFmpeg/ffprobe 8.0.1、jsonschema 4.26.0、httpx 0.28.1；MCP 是選裝。本次 mock 使用現有依賴，未修改全域 Python。
 
 ```sh
-cd '<repo>/app'
+cd watch-once-teach-human-and-robot/app
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 # 本機沒有 ffmpeg/ffprobe 才安裝：
@@ -49,7 +49,7 @@ python3 fixtures/make_synthetic.py
 
 ```sh
 python3 cli.py runs/synthetic-fixture.mp4 \
-  --workspace-path '<workspace>'
+  --workspace-path <workspace-root>
 ```
 
 需要指定路徑時加 `--out runs/my-new-run`（必須尚不存在且在 app/ 內）。預設 `--provider mock` 讀取 `fixtures/synthetic-response.json` 的兩個手寫示例步驟，**沒有辨識影片／旁白**，也不宣稱任意影片都能拆成固定步數。換片或抽樣率時須提供匹配的新 fixture：
@@ -57,7 +57,7 @@ python3 cli.py runs/synthetic-fixture.mp4 \
 ```sh
 python3 cli.py /absolute/path/authorized.mp4 \
   --provider mock --mock-response /absolute/path/custom-response.json \
-  --workspace-path '<workspace>'
+  --workspace-path <workspace-root>
 ```
 
 自訂 fixture 只包含 `{"steps": [...]}`；每一步形狀見 `operation.schema.json` 與內建 fixture。source 由本地抽幀程序填入，fixture 不能更改 SHA 或隱藏 mock 標記。選擇 mock 時，每份 JSON／手冊／待辦及抽幀檔名都可辨識 mock；frame 圖片本身仍是來源像素，沒有造假標註。
@@ -118,11 +118,11 @@ python3 cli.py /absolute/path/authorized.mp4 \
 
 ```sh
 set -a
-source /path/to/your/meta.env  # exports META_API_KEY; never commit this file
+source ~/.claude/secrets/meta.env
 set +a
 python3 cli.py /absolute/path/authorized.mp4 \
   --provider meta --confirm-paid-api --model muse-spark-1.2 \
-  --workspace-path '<workspace>'
+  --workspace-path <workspace-root>
 ```
 
 `--model` 支援 `muse-spark-1.2`／`muse-spark-1.3`，預設 1.2。真模式 POST `https://api.meta.ai/v1/files`，Bearer META_API_KEY，multipart `purpose=user_data` 與原始 MP4；原檔音軌保留，不把抽幀當作原聲輸入。再以 upload.id 為 `input_file.file_id` 呼叫 `/v1/responses`，message user content 包含 input_text/input_file，使用實際 schema object、strict JSON schema、max_output_tokens=4000、stream=false、reasoning.effort=low。低推理量用來在既定輸出額度內保留可見答案空間；不代表已驗證各推理量的品質差異。
@@ -141,7 +141,7 @@ python3 cli.py /absolute/path/authorized.mp4 \
 .venv/bin/python -m pip install -r requirements-mcp.txt
 # 操作員已安全設定 NAVIDE_MCP_URL 的同一個 shell：
 .venv/bin/python cli.py runs/synthetic-fixture.mp4 \
-  --workspace-path '<workspace>' --send-navide
+  --workspace-path <workspace-root> --send-navide
 ```
 
 adapter 使用官方 Python SDK 1.x 的 `ClientSession` ＋ `mcp.client.streamable_http.streamablehttp_client`，依序 initialize、`call_tool('plan_create', args)`。官方 [1.x transport 定義](https://github.com/modelcontextprotocol/python-sdk/blob/v1.x/src/mcp/client/streamable_http.py) 保留該入口；2.x API 不在本次範圍。外部 caller 強制絕對 workspace_path。回執只保留 `rel_path/name/stage`；todos 已包含在 plan_create，不再逐項新增。逾時／回執不明不自動重送，可能已建立 plan，先在 Navide 檢視再決定下一步。此 adapter 不開 agent、不執行任務。
@@ -153,7 +153,7 @@ adapter 使用官方 Python SDK 1.x 的 `ClientSession` ＋ `mcp.client.streamab
 ```sh
 python3 -m unittest discover -s tests -p test_core.py -v
 python3 cli.py runs/synthetic-fixture.mp4 \
-  --workspace-path '<workspace>' --out runs/mock-smoke
+  --workspace-path <workspace-root> --out runs/mock-smoke
 ```
 
 單一 test 檔六個測例涵蓋：輸入拒絕、decoder frame/PTS、schema／語意、mock 全鏈與無效不建任務、Meta 本地 HTTP mock 合約、MCP 本地替身的初始化／單次呼叫／不重試。測試只使用假 key 字串與 in-process HTTP transport，不呼叫網路、不讀真 key。smoke 使用上述短 synthetic 影片；`runs/mock-smoke` 只可第一次指定，重跑請省略 `--out` 或選新路徑。
@@ -162,19 +162,19 @@ python3 cli.py runs/synthetic-fixture.mp4 \
 
 後續授權真 smoke（同日）：第一次 CLI exit 2，noncompleted 回覆被拒絕；證據保留於 `runs/real-smoke-attempt-1/`，詳細 status／usage 因上述舊缺陷未知，原因不得推定為 token cap。修正診斷保存後，明確 low reasoning、cap 4000 再呼叫一次，CLI exit 0，upload/responses HTTP 200、completed，`runs/real-smoke/` 完成 14 個抽幀 → 真 provider → 五欄／時間／引用驗證 → 手冊 → 4 個 pending 待辦 payload；未送 MCP、未派工。原有六測例未重跑，只對新增失敗紀錄缺陷做聚焦驗證。
 
-成功輪 input 2704（cached 0）、output 2340（已含 reasoning 1542）；依 [Meta Standard 費率](https://dev.meta.ai/docs/pricing-rate-limits) input $1.25/M、output $4.25/M，usage 推算 **US$0.013325**，並非帳單核對。指揮先前比較費用 US$0.026018，加成功輪為已知 **US$0.039343**；首次失敗未知另預留 **US$0.5**，保守額度占用 **US$0.539343**，不可把預留當實際帳單。細節見 `evidence/real-smoke/run-report.json`（四組證據 runs 見 `evidence/README.md`）。
+成功輪 input 2704（cached 0）、output 2340（已含 reasoning 1542）；依 [Meta Standard 費率](https://dev.meta.ai/docs/pricing-rate-limits) input $1.25/M、output $4.25/M，usage 推算 **US$0.013325**，並非帳單核對。指揮先前比較費用 US$0.026018，加成功輪為已知 **US$0.039343**；首次失敗未知另預留 **US$0.5**，保守額度占用 **US$0.539343**，不可把預留當實際帳單。細節見 `runs/real-smoke/run-report.json`。
 
 真輸出僅代表結構驗證成功，語意及完成判斷仍待人工驗收。零件描述中的 `possibly nut` 保留不確定性，不可改稱確定螺帽；`grasp verified` 仍須人工查證。步驟 2/4 的最終就位／鎖緊未驗證，3.5/7/10.5/14 秒區間邊界不等於精確完成證據。單支無聲影片無法證明通用性或達成準確率／誤差門檻。
 
 M1 是 **4 個操作、2 次裝配**，不是 4 次裝配；目前這段驗收僅 **n=1**，不能泛化到其他物件或工序。接觸時夾爪遮擋、零件類型及穩固夾持仍有未知；原片無音軌，不能據此驗證音訊／旁白理解。
 
-後續 root 已回報以自己的 pane MCP 建立並回讀 mock 與 real 計畫；各 run 的 `navide-mcp-receipt.json` 記錄此事。M1 real 計畫為 draft、4 pending、全部 owner=user，沒有 agent 執行。CLI 原始 `submission.json` 仍維持 exported_not_sent，standalone adapter 仍未真連線驗證。完整費用、產物與人工驗收界線見 repo 頂層 README；內部交接文件未公開。
+後續 root 已回報以自己的 pane MCP 建立並回讀 mock 與 real 計畫；各 run 的 `navide-mcp-receipt.json` 記錄此事。M1 real 計畫為 draft、4 pending、全部 owner=user，沒有 agent 執行。CLI 原始 `submission.json` 仍維持 exported_not_sent，standalone adapter 仍未真連線驗證。完整費用、產物、人工驗收界線與 Muse 指揮交接見內部 HANDOFF（未公開）。
 
 上述費用是 M1／模型比較的歷史快照，包含首輪未知費用的 US$0.5 預留，不是專案當前總帳單；最新彙總見下方文件收尾紀錄。
 
 ## W1 唯一重試結果與後續界線
 
-W1 唯一一次粒度重試已結束：原輪 **0/4 → 重試 1/4，仍未通過**。唯一配對的開始／結束誤差為 **2.5／0.5 秒**；GT 本身約 **±2 秒**，穩健 ≤3 秒仍為 **0/4**，不能稱為精密時間驗收通過。回覆縮成 4 列不等於四步都辨識成功。保留原 GT，不再重試。連續細動作中的板件身份辨識與結構追蹤列為已知限制；Demo 主打 M1，但 M1 通過仍僅 **n=1**，不代表通用能力。素材 **9 支全數核驗**也不等於 9 支都經模型驗收通過。（W1 重試報告為未公開的執行產物，見 demo 影片。）
+W1 唯一一次粒度重試已結束：原輪 **0/4 → 重試 1/4，仍未通過**。唯一配對的開始／結束誤差為 **2.5／0.5 秒**；GT 本身約 **±2 秒**，穩健 ≤3 秒仍為 **0/4**，不能稱為精密時間驗收通過。回覆縮成 4 列不等於四步都辨識成功。保留原 GT，不再重試。連續細動作中的板件身份辨識與結構追蹤列為已知限制；Demo 主打 M1，但 M1 通過仍僅 **n=1**，不代表通用能力。素材 **9 支全數核驗**也不等於 9 支都經模型驗收通過。來源：W1 粒度重試報告（未公開；結論：0/4 → 重試 1/4，仍未通過，連續細動作列為已知限制）。
 
 本次 W1 重試新增 usage 推算費用 **US$0.020043**。依指揮最新彙總，已知費用 **US$0.08082825**，加舊失敗未知費用預留 **US$0.50**，保守額度占用 **US$0.58082825**；這不是帳單核對，未知費用與預留不得當成實際支出。
 
@@ -182,7 +182,7 @@ Muse 已指定 B 段改由 root 的 `pane_mcp` 建單／回讀／處理狀態；
 
 ## 本地狀態與交件邊界
 
-本 README 只記錄本地 CLI、文件與上述驗收快照，不新增或取代 startup 相關既有交件指示，也不宣稱已通過參賽／交件審核。啟動方式仍是前述 CLI 安裝與執行命令；web 入口見下方「Web UI added 11/3」段（本地 single-process server，用完即關，非長存服務）。
+本 README 只記錄本地 CLI、文件與上述驗收快照，不新增或取代 startup 相關既有交件指示，也不宣稱已通過參賽／交件審核。啟動方式仍是前述 CLI 安裝與執行命令；下述 Web UI 段為 11/3 後補（此前無 web 入口）。
 
 既有 180 秒／3 分鐘 demo 分鏡屬交件準備，不等於已完成錄影、旁白或送件；尚未完成的 SAM、Image、執行回流不得當作實作成果呈現。依目前核准計畫的 review note，**公開 repo、發文與 Submit 仍須本人核准**；規劃要求公開 repo 不等於已取得公開授權。這次只補本地 README，未公開、commit、部署或提交作品。
 
@@ -198,11 +198,13 @@ python3 server.py --port 18766
 # open http://127.0.0.1:18766/ in a browser
 ```
 
-功能：上傳 MP4 或選內建範例（synthetic／M1）→ 分析 → 左右雙欄（時間軸手冊／操作 JSON）→ 匯出（LeRobot 標註／VLA 序列／規劃步驟，見 `export/README.md`，僅標註層，未在真機器人或 VLA 跑過）→ Navide payload 預覽（未實連照實標示）→ 歷史 run 瀏覽。
+功能：固定 Meta Muse Spark（無 provider 選單）。拖放／點選上傳 MP4 → 可填一句 task-hint（命名輔助，不代看影片）→ 勾白話付費確認 → Analyze（server 端強制每日上限，見 Settings）→ 左右雙欄（手冊＋截圖／操作 JSON，每步附 evidence 可見證據句）→ 匯出（LeRobot 標註／VLA 序列／規劃步驟，見 `export/README.md`，僅標註層）→ Navide payload 預覽（未實連照實標示）→ 歷史 run 瀏覽（只列真推論）。無金鑰時 Analyze 換成 Settings 引導；首頁 hero 有 M1 真推論 before／after 靜態對照（純說明圖，無連結）。等分步驟（各段差 5% 內）標 needs-review 警告，不擋 run。驗收：tests 83/83（＋1 環境 skip）、sha256 846/846（7 檔預期變動已更新基準）；live e2e 待錄製機重跑；畫面經多輪截圖自評＋真瀏覽器實機操作驗收。
 
-mock 與真推論：預設 mock（免費，畫面標 MOCK badge，用手寫 fixture，不代表模型輸出）；選 Meta＋勾確認才做真推論（muse-spark-1.2，server 端強制上限 3 次／US$0.10，啟動前需 export META_API_KEY，金鑰不寫檔不印出）。
+進度頁（/job/）顯示 7 段白話進度（每段附真實資料：檔名／長度／解析度／SHA、抽幀時刻、驗證細項、費用）＋畫格 filmstrip＋Activity log。reduced-motion 下無動畫。
 
-驗收：後端 63 項全過、live e2e 18/18、tests 12/12、sha256 零非預期變動；畫面經 7 輪截圖自評定版＋真瀏覽器實機操作驗收。
+Settings（首頁右上角／Set up 入口開彈窗，原生 dialog＋fetch 存檔，免整頁重整；整頁版已移除，只有彈窗）：彈窗只放 API key 欄位＋狀態＋Save／Clear。無 JS 時 Settings 不可用（只能用環境變數或手寫 .env）；分析流程本身不依賴 JS（原生表單送出）。本機瀏覽器以 password 欄位提交 META_API_KEY，POST 到 127.0.0.1 server，寫入 `app/.env`（權限 0600，已在 .gitignore），存檔即生效免重啟。頁面只顯示 `configured · ****末4碼`，完整金鑰不出現在任何頁面、API 或 log。防護：僅接受 Host 127.0.0.1/localhost、檢查 Origin/Referer 同源、CSRF token；環境變數優先於 .env。無 Test connection 按鈕（api.meta.ai 無免費驗證端點；實際分析時才驗證）。模型固定 muse-spark-1.2（CLI `--model`／MCP `model` 參數可指定 1.3，UI 不顯示）。每日上限只讀 `.env`（`WEB_MAX_CALLS_PER_DAY`／`WEB_MAX_USD_PER_DAY`，見 `.env.example`），預設 20 次／US$1.00，UTC 每日重置，web＋MCP 共用、server 強制；本機比賽用 3／0.10。上傳區下方 keyline 只顯示金鑰狀態＋今日用量小字，不可調（Advanced 摺疊已移除）。
+
+Development／tests：`provider=mock` 只留給 CLI、MCP 與自動測試（不花錢），UI 不露出。`fixtures/make_synthetic.py` 產生測試片；`web/e2e-http-test.py` 預設 mock 全鏈（加 `--provider meta` 可真跑，會花錢；上傳檔由 `--clip` 指定）。防呆：web／MCP 跑 mock 前比對影片 sha256 與 synthetic 測試片，不一致拒絕（fixture 只描述測試片，套到真片會誤標）。Prompt 版本：v1 是 11/3 白天（含）以前所有 run 的提示詞，公開 evidence 前 4 筆（m1-checklist-loop-1030-r2、m1-muse-rerun、real-smoke、web-20261103T083626Z）全是 v1 產出，無 evidence 欄位，舊結果頁顯示「not recorded」屬正常。v2 是 11/3 晚上依測試員落差報告改的（切割規則、frame 引用、每步 evidence 必填、done 可見性），第 5 筆 evidence（web-20261103T111002Z）即 v2 驗收 run；預設啟用，CLI `--prompt-version v1` 可回退；v2 通用規則不含任何參考答案字眼與具體時間。`--task-hint` 只做命名輔助（預設空）並記入 provider-result。每個新 run 的 provider-result 都記 `prompt_version`（mock 記 null）；無此欄即 v1。不可把 v2 效果套到舊結果上。工單 12 測試見 `tests/test_prompt_v2.py`。
 
 ## Run it locally（從零部署到本機）
 
@@ -217,7 +219,7 @@ cd watch-once-teach-human-and-robot/app
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 
-# 3. 產生內建 synthetic 範例（M1 範例需自行依授權下載，不附在 repo）
+# 3. （測試用）產生 synthetic 測試片；M1 原片需自行依授權下載，不附在 repo
 .venv/bin/python fixtures/make_synthetic.py
 
 # 4. 啟動（一定要用 .venv 的 python：server 用同一個直譯器跑 CLI）
@@ -225,8 +227,8 @@ python3 -m venv .venv
 # open http://127.0.0.1:18766/ in a browser
 ```
 
-5. 先用 mock 試跑：首頁按 Try an example → 選 Synthetic fixture → Analyze（免費，結果掛 MOCK badge，用手寫 fixture，不代表模型輸出）。
-6. 再跑真推論（二選一）：`export META_API_KEY=…` 後重啟 server，或 `cp .env.example .env` 填入金鑰（.env 已在 .gitignore，不用重啟）。首頁會顯示 `Meta API key: configured / not configured`（只顯示狀態，不顯示值）。然後選 Meta＋勾確認 → Analyze（muse-spark-1.2，server 端強制上限 3 次／US$0.10，約 US$0.02／次）。
+5. 首頁 hero 有 M1 真推論 before／after 靜態對照（純說明圖）；跑過的真結果出現在 History。
+6. 再跑真推論：按首頁 Settings 開彈窗填入 META_API_KEY（或啟動前 `export META_API_KEY=…`、`cp .env.example .env` 填入；.env 已在 .gitignore）。上傳區下方會顯示 `Meta API key: configured / not configured`（只顯示狀態，不顯示值）。上傳影片 → 勾白話確認 → Analyze（模型固定 1.2；每日上限改 `.env`，預設 20 次／US$1.00；14 秒片約 US$0.01，依長度而定）。
 
 常見錯誤：
 
@@ -236,7 +238,7 @@ python3 -m venv .venv
 
 ## MCP server（給 agent 呼叫）
 
-`mcp_server.py` 用官方 MCP SDK（stdio），只包既有流程、不改核心。tools：`list_examples`、`analyze_video`（mock 免費；meta 需 `confirm_paid: true`，與 Web UI 共用 3 次／US$0.10 上限）、`get_result`、`send_to_navide`（payload 預覽，未實連）、`export`（lerobot／vla／plan）、`list_runs`。路徑只收 app/ 內或內建範例；錯誤不洩漏絕對路徑與金鑰。
+`mcp_server.py` 用官方 MCP SDK（stdio），只包既有流程、不改核心。tools：`list_examples`、`analyze_video`（mock 免費；meta 需 `confirm_paid: true`，與 Web UI 共用 3 次／US$0.10 上限）、`get_result`、`export`（lerobot／vla／plan）、`list_runs`、`send_to_navide`（payload 預覽，未實連）。路徑只收 app/ 內或內建範例；錯誤不洩漏絕對路徑與金鑰。
 
 ```sh
 .venv/bin/python -m pip install -r requirements-mcp.txt

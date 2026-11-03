@@ -23,6 +23,7 @@ class MockProvider:
         document = {"schema_version": "1.0", "source": copy.deepcopy(manifest["source"]), "steps": fixture["steps"]}
         return document, {
             "provider": "mock", "mock": True, "model": None, "usage": None,
+            "prompt_version": None,
             "fixture_sha256": sha256(self.response_path),
             "notice": "Hand-authored fixture response; no video/audio recognition or paid API call.",
         }
@@ -108,13 +109,65 @@ def parse_meta_response(body):
     return document, saved_usage
 
 
+PROMPT_VERSIONS = ("v1", "v2")
+
+
+def sanitize_hint(task_hint):
+    return " ".join(str(task_hint or "").split())[:200]
+
+
+def build_prompt(version, manifest, task_hint=""):
+    if version not in PROMPT_VERSIONS:
+        raise AppError("Unsupported prompt version.")
+    prompt = (
+        "Read the attached ORIGINAL MP4, including its audio when present. Produce a human-reviewable "
+        "operation sequence based only on visible/audible evidence. Do not claim SAM tracking. "
+        "Each concept has exactly the five string fields object/action/target/pre/done. "
+        "Use ordered non-overlapping integer millisecond intervals relative to the first decoded video PTS. "
+        "Reference only supplied sample IDs whose sample_time_ms falls inside that step's [start_ms,end_ms). "
+        "Use explicit uncertainty in the five strings when evidence is unclear. Do not invent steps. "
+        "Use conservative visual part names when ambiguous (for example, small round part); "
+        + ("do not assume a small round part is a nut. " if version == "v2"
+           else "do not assume a washer is a nut. ")
+        + "Time intervals are approximate observation windows, not proof of exact completion. "
+        "The done field must state a visible completion criterion and say unverified when completion is not shown. "
+        "Keep concept strings concise and group continuous motions into meaningful steps. "
+    )
+    if version == "v2":
+        prompt += (
+            "Cut a new step whenever the gripper opens or closes, or an object leaves or arrives at a place; "
+            "one grasp and one place each count as one step; entry and exit may merge into adjacent steps. "
+            "For each step, cite the frame IDs you used in source_frame_refs and write one visible evidence "
+            "sentence in evidence naming what is seen and at which cited frames (for example, which gripper "
+            "moved, which object left the table, whether the gripper is open or closed). "
+            "The done field must describe a state visible in the cited frames (for example, part resting on "
+            "target with gripper open); never write tightening, locking, or securing unless the video shows "
+            "a fastening action; say unverified when completion is not shown. "
+            "Write done as only the end state visible on screen; do not add conditions that cannot be seen. "
+        )
+    hint = sanitize_hint(task_hint)
+    if hint:
+        prompt += f"Operator-provided task hint, naming help only, verify against the video: {hint}. "
+    prompt += (
+        "Return schema_version=1.0 and copy this source unchanged: "
+        + json.dumps(manifest["source"], ensure_ascii=False)
+        + ". Available frame references (images are for local traceability; the attached MP4 is the model input): "
+        + json.dumps([{k: f[k] for k in ("id", "sample_time_ms", "source_frame", "pts")} for f in manifest["frames"]])
+    )
+    return prompt
+
+
 class MetaProvider:
-    def __init__(self, model="muse-spark-1.2", confirm_paid=False):
+    def __init__(self, model="muse-spark-1.2", confirm_paid=False, prompt_version="v2", task_hint=""):
         if model not in ("muse-spark-1.2", "muse-spark-1.3"):
             raise AppError("Unsupported model.")
         if not confirm_paid:
             raise AppError("Meta requires explicit --confirm-paid-api; no paid call made.")
+        if prompt_version not in PROMPT_VERSIONS:
+            raise AppError("Unsupported prompt version.")
         self.model = model
+        self.prompt_version = prompt_version
+        self.task_hint = sanitize_hint(task_hint)
 
     def generate(self, video_path, manifest, schema):
         try:
@@ -125,25 +178,11 @@ class MetaProvider:
             raise AppError("META_API_KEY is empty; no paid call made.")
         if sha256(video_path) != manifest["source"]["video_sha256"]:
             raise AppError("Original MP4 changed before upload.")
-        prompt = (
-            "Read the attached ORIGINAL MP4, including its audio when present. Produce a human-reviewable "
-            "operation sequence based only on visible/audible evidence. Do not claim SAM tracking. "
-            "Each concept has exactly the five string fields object/action/target/pre/done. "
-            "Use ordered non-overlapping integer millisecond intervals relative to the first decoded video PTS. "
-            "Reference only supplied sample IDs whose sample_time_ms falls inside that step's [start_ms,end_ms). "
-            "Use explicit uncertainty in the five strings when evidence is unclear. Do not invent steps. "
-            "Use conservative visual part names when ambiguous (for example, small round part); do not assume a washer is a nut. "
-            "Time intervals are approximate observation windows, not proof of exact completion. "
-            "The done field must state a visible completion criterion and say unverified when completion is not shown. "
-            "Keep concept strings concise and group continuous motions into meaningful steps. "
-            "Return schema_version=1.0 and copy this source unchanged: "
-            + json.dumps(manifest["source"], ensure_ascii=False)
-            + ". Available frame references (images are for local traceability; the attached MP4 is the model input): "
-            + json.dumps([{k: f[k] for k in ("id", "sample_time_ms", "source_frame", "pts")} for f in manifest["frames"]])
-        )
+        prompt = build_prompt(self.prompt_version, manifest, self.task_hint)
         previous_logging = logging.root.manager.disable
         logging.disable(logging.CRITICAL)
-        diagnostics = {"provider": "meta", "mock": False, "model": self.model, "max_output_tokens": 4000, "reasoning_effort": "low"}
+        diagnostics = {"provider": "meta", "mock": False, "model": self.model, "max_output_tokens": 4000, "reasoning_effort": "low",
+                         "prompt_version": self.prompt_version, "task_hint": self.task_hint or None}
         try:
             # No retries or redirects. Upload the original bytes, preserving audio.
             with httpx.Client(timeout=120, follow_redirects=False, trust_env=False) as client:
@@ -184,4 +223,5 @@ class MetaProvider:
                           "upload_http_status": upload.status_code, "response_http_status": response.status_code,
                           "response_status": response_body["status"],
                           "reasoning_effort": "low", "max_output_tokens": 4000,
+                          "prompt_version": self.prompt_version, "task_hint": self.task_hint or None,
                           "notice": "Original MP4 uploaded with audio intact when present; human review required."}

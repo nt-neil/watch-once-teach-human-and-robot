@@ -1,12 +1,53 @@
 # Watch Once, Teach Human and Robot (Meta Hackathon #6)
 
 Teaching video → 📘 manual for humans + 🤖 JSON for robots.
+For hackathon judges and makers: runs 100% on your machine, upload-first, every claim traceable to frames.
 Built during the Meta hackathon; demo AI is all Meta (Muse Spark, Muse Code).
 
-Watch a demo clip once. Get a human assembly manual with source frames,
-a validated 5-field operation JSON (`object/action/target/pre/done`), a
+![Home page](app/web/design-review/round-13/home-1280.png)
+*(Screenshot from design round-13; v2 result: app/web/design-review/round-13/result-v2-1280.png.)*
+
+Watch a how-to clip once. Get a human assembly manual with source frames,
+a validated operation JSON (`object/action/target/pre/done` + per-step evidence), a
 Navide task payload, and robot-ready export annotations — via CLI, local
 web UI, or MCP.
+
+## 30-second start (mock, free, no API key)
+
+```sh
+git clone https://github.com/nt-neil/watch-once-teach-human-and-robot.git
+cd watch-once-teach-human-and-robot/app
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python fixtures/make_synthetic.py
+.venv/bin/python web/server.py --port 18766
+# open http://127.0.0.1:18766/ → hero shows a real before/after illustration;
+# upload your own video with an API key to run an analysis
+```
+
+Needs Python 3.11+ and FFmpeg (`ffmpeg`, `ffprobe`). The UI is fixed to Meta
+Muse Spark (fixed 1.2): upload → tick the credit checkbox → Analyze.
+Daily budget lives in `.env` (`WEB_MAX_CALLS_PER_DAY` / `WEB_MAX_USD_PER_DAY`,
+defaults 20 calls / US$1.00).
+The M1 clip is not in the repo (dataset license): to re-run it,
+download [0001_task_video.mp4](https://aistairc.github.io/aist_bimanip_site/statics/video/0001_task_video.mp4)
+(CC BY 4.0, © 2025 AIST) to `<repo>/materials-survey/research/samples/`.
+Full zero-to-running guide with troubleshooting: `app/README.md` →
+“Run it locally”.
+
+## Contents
+
+- [30-second start](#30-second-start-mock-free-no-api-key)
+- [Architecture](#architecture)
+- [What this repo contains](#what-this-repo-contains-built-during-the-event)
+- [Run with Meta (.env)](#run-with-meta-env)
+- [Web UI](#web-ui)
+- [MCP](#mcp)
+- [Export formats](#export-formats)
+- [Verified boundaries](#verified-boundaries-read-before-reusing)
+- [Sources and attribution](#sources-and-attribution)
+- [Execution attribution](#execution-attribution)
+- [License](#license)
 
 ## Architecture
 
@@ -32,13 +73,13 @@ core logic and schemas are untouched.
 ## What this repo contains (built during the event)
 
 - `app/`: video CLI — frame extraction, mock + Meta Muse Spark providers,
-  5-field operation JSON validation, Markdown manual, and Navide task
-  payload export (+ optional MCP adapter).
+  operation JSON validation (5 fields + per-step evidence), Markdown manual,
+  and Navide task payload export (+ optional MCP adapter).
 - `app/desktop-demo/`: isolated local TODO page + loopback server + recording
   script used for the computer-operation reproduce demo.
 - `app/fixtures/`, `app/tests/`: self-made synthetic fixtures and unit tests.
-- `app/web/`: minimal local web UI (stdlib only, binds 127.0.0.1): pick a
-  video or built-in example → analyze → timeline manual + robot-step cards →
+- `app/web/`: minimal local web UI (stdlib only, binds 127.0.0.1, fixed to
+  Meta Muse Spark): upload → analyze → timeline manual + robot-step cards →
   export previews → Navide payload preview → run history.
 - `app/export/`: export layer (LeRobot-style annotation, VLA sequence, plan
   steps). Annotation layer only — no robot states, never run on a real
@@ -49,20 +90,6 @@ core logic and schemas are untouched.
 
 Pre-existing external tools (not built here): Navide, Muse CLI/Muse Code,
 Meta models and services, FFmpeg/ffprobe, MCP SDK, Python deps.
-
-## Quick start (mock, no API key)
-
-```sh
-git clone https://github.com/nt-neil/watch-once-teach-human-and-robot.git
-cd watch-once-teach-human-and-robot/app
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python fixtures/make_synthetic.py
-.venv/bin/python cli.py runs/synthetic-fixture.mp4 --workspace-path '<workspace>'
-```
-
-Full zero-to-running guide (venv, server, mock trial, live inference,
-troubleshooting): `app/README.md` → “Run it locally”.
 
 ## Run with Meta (.env)
 
@@ -86,11 +113,12 @@ cd '<repo>/app'
 # open http://127.0.0.1:18766/ in a browser
 ```
 
-Mock vs live: the UI defaults to mock (free; results carry a MOCK badge and
-come from a hand-written fixture, not from any model). A real Meta inference
-only happens when you pick the Meta provider and tick the paid-API checkbox;
-the server enforces max 3 calls / US$0.10. The home page shows
+Fixed to Meta Muse Spark (no provider menu). A real inference only happens
+when you tick the credit checkbox; the server enforces the daily budget from
+`.env` (defaults 20 calls / US$1.00). Without a key, Analyze becomes a
+Settings button; the hero before/after is a static illustration only. The home page shows
 `Meta API key: configured / not configured` (status only, never the value).
+`provider=mock` remains in the CLI/MCP/tests for free automated checks.
 
 ## MCP
 
@@ -146,13 +174,14 @@ samples in `app/export/samples/`.
 - Navide plans were created via pane-relayed MCP; the standalone adapter has
   never been live-verified. Observed API spend ≈ US$0.22 + US$0.60 reserves
   as of 2026-11-03 (usage-rate estimates, not bill reconciliation).
-- Web UI + export + MCP test evidence: backend 69 pass, live e2e 18/18,
-  unit suite 24/24, sha256 zero unexpected drift, 11 design-review rounds +
-  real-browser walkthroughs (one paid Meta run).
-- Raw evidence: `app/evidence/` — 4 runs (real-smoke 10/30, checklist loop,
-  M1 re-run, UI live run) with operations/manual (or checklist), provider
-  result with model id + usage, cost report, safe request/response, and
-  320px frame thumbnails. Keys and provider private ids redacted.
+- Web UI + export + MCP test evidence: backend 75 pass, live e2e 19/19,
+  unit suite 83/83, sha256 zero unexpected drift, 13 design-review rounds +
+  real-browser walkthroughs (two paid Meta UI runs).
+- Raw evidence: `app/evidence/` — 5 runs (real-smoke 10/30 v1, checklist loop
+  v1, M1 re-run v1, UI live run v1, UI live run v2) with operations/manual
+  (or checklist), provider result with model id + usage, cost report, safe
+  request/response, and 320px frame thumbnails. Keys and provider private
+  ids redacted.
 
 ## Sources and attribution
 

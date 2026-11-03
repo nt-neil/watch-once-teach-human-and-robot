@@ -88,6 +88,9 @@ irrelevant log line
             mutate(lambda x: x["steps"][0].update(source_frame_refs=["frame-000099"])),
             mutate(lambda x: x["steps"][0].update(source_frame_refs=["frame-000003"])),
             mutate(lambda x: x["source"].update(mock=False)),
+            mutate(lambda x: x["steps"][0].pop("evidence")),
+            mutate(lambda x: x["steps"][0].update(evidence="   ")),
+            mutate(lambda x: x["steps"][0].update(evidence=7)),
         ]
         for index, bad in enumerate(invalid):
             with self.subTest(index=index), self.assertRaises(AppError):

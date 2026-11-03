@@ -11,7 +11,8 @@
         "pre": "已播放自製 synthetic fixture；這是手寫範例，不是辨識結果",
         "done": "人已查看第一張色卡"
       },
-      "source_frame_refs": ["frame-000001"]
+      "source_frame_refs": ["frame-000001"],
+      "evidence": "手寫測試夾具，非模型辨識；對應測試片第 1 格。"
     },
     {
       "id": "compare",
@@ -24,7 +25,8 @@
         "pre": "已查看第一張色卡",
         "done": "人已比對兩張圖；未驗證任何真實操作"
       },
-      "source_frame_refs": ["frame-000003"]
+      "source_frame_refs": ["frame-000003"],
+      "evidence": "手寫測試夾具，非模型辨識；對應測試片第 3 格。"
     }
   ]
 }

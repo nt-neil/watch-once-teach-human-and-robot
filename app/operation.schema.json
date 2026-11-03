@@ -25,11 +25,12 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "start_ms", "end_ms", "concept", "source_frame_refs"],
+        "required": ["id", "start_ms", "end_ms", "concept", "source_frame_refs", "evidence"],
         "properties": {
           "id": {"type": "string", "pattern": "^[a-zA-Z0-9_-]+$"},
           "start_ms": {"type": "integer", "minimum": 0},
           "end_ms": {"type": "integer", "minimum": 1},
+          "evidence": {"type": "string", "minLength": 1},
           "concept": {
             "type": "object",
             "additionalProperties": false,

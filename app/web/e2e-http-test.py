@@ -6,9 +6,10 @@ poll /api/job -> /result -> /export. For the recording machine (real bind).
 
 Usage:
   python3 e2e-http-test.py [--base http://127.0.0.1:18766]
-      [--example synthetic] [--timeout 300] [--out e2e-result.json]
+      [--clip ../runs/synthetic-fixture.mp4] [--timeout 300] [--out e2e-result.json]
 
-Exit 0 = all checks pass. Mock mode only: spends $0.
+Exit 0 = all checks pass. Default --provider mock spends $0;
+--provider meta spends real credit (needs server key, confirm auto-sent).
 """
 import argparse
 import json
@@ -47,12 +48,17 @@ def get(op, url, timeout=20):
         return e.code, e.read()
 
 
-def build_multipart(fields):
+def build_multipart(fields, clip_path):
     bound = "E2EBOUNDARY7d3f"
     body = b""
     for k, v in fields.items():
         body += (f"--{bound}\r\nContent-Disposition: form-data; "
                  f'name="{k}"\r\n\r\n{v}\r\n').encode()
+    with open(clip_path, "rb") as f:
+        clip = f.read()
+    body += (f"--{bound}\r\nContent-Disposition: form-data; "
+             f'name="video"; filename="e2e-clip.mp4"\r\n'
+             f"Content-Type: video/mp4\r\n\r\n").encode() + clip + b"\r\n"
     body += f"--{bound}--\r\n".encode()
     return body, f"multipart/form-data; boundary={bound}"
 
@@ -60,7 +66,9 @@ def build_multipart(fields):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="http://127.0.0.1:18766")
-    ap.add_argument("--example", default="synthetic")
+    ap.add_argument("--clip", default="../runs/synthetic-fixture.mp4")
+    ap.add_argument("--provider", default="mock", choices=("mock", "meta"),
+                    help="meta spends real API credit and needs server key + confirm")
     ap.add_argument("--timeout", type=int, default=300)
     ap.add_argument("--out", default="e2e-result.json")
     args = ap.parse_args()
@@ -79,7 +87,15 @@ def main():
         b0 = {}
     ok &= check("GET /api/budget readable", s == 200 and "paid_calls" in b0, f"status={s}")
 
-    body, ctype = build_multipart({"provider": "mock", "example": args.example})
+    fields = {"provider": args.provider}
+    if args.provider == "meta":
+        fields["confirm"] = "yes"
+    clip = args.clip if os.path.isabs(args.clip) else os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), args.clip)
+    ok &= check("clip file exists", os.path.isfile(clip), os.path.basename(clip))
+    if not os.path.isfile(clip):
+        return finish(args, ok, {})
+    body, ctype = build_multipart(fields, clip)
     req = urllib.request.Request(base + "/analyze", data=body,
                                  headers={"Content-Type": ctype}, method="POST")
     job_id = ""
@@ -90,7 +106,7 @@ def main():
         loc, st = e.headers.get("Location", ""), e.code
     if st == 303 and loc.startswith("/job/"):
         job_id = loc[len("/job/"):]
-    ok &= check("POST /analyze (mock) -> 303 job redirect", bool(job_id),
+    ok &= check(f"POST /analyze ({args.provider}) -> 303 job redirect", bool(job_id),
                 f"status={st} loc={loc}")
     if not job_id:
         return finish(args, ok, {})
@@ -142,15 +158,19 @@ def main():
         b1 = json.loads(braw.decode())
     except ValueError:
         b1 = {}
-    same = (b0.get("paid_calls") == b1.get("paid_calls")
-            and b0.get("spend_usd") == b1.get("spend_usd"))
-    ok &= check("mock run spends $0", same, f"before={b0} after={b1}")
+    if args.provider == "mock":
+        same = (b0.get("paid_calls") == b1.get("paid_calls")
+                and b0.get("spend_usd") == b1.get("spend_usd"))
+        ok &= check("mock run spends $0", same, f"before={b0} after={b1}")
+    else:
+        spent = (b1.get("paid_calls", 0) or 0) > (b0.get("paid_calls", 0) or 0)
+        ok &= check("meta run records budget", spent, f"before={b0} after={b1}")
 
     return finish(args, ok, {"job_id": job_id, "run_id": run_id, "stages": stages})
 
 
 def finish(args, ok, extra):
-    report = {"ok": bool(ok), "base": args.base, "example": args.example,
+    report = {"ok": bool(ok), "base": args.base, "clip": args.clip,
               "checks": CHECKS, **extra}
     try:
         with open(args.out, "w") as f:

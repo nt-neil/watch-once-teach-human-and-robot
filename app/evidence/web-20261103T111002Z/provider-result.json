@@ -1,0 +1,119 @@
+{
+  "source": {
+    "video_sha256": "33e23ee7a91cfde0f862f51675cc8315cb13e529617eda59a1da6e4acc09bf3d",
+    "video_name": "1793704202_0001_task_video.mp4",
+    "duration_ms": 14000.0,
+    "provider": "meta",
+    "mock": false,
+    "frame_manifest": "frames.json"
+  },
+  "metadata": {
+    "provider": "meta",
+    "mock": false,
+    "model": "muse-spark-1.2",
+    "usage": {
+      "input_tokens": 2858,
+      "output_tokens": 2675,
+      "input_tokens_details": {
+        "cached_tokens": 99
+      },
+      "output_tokens_details": {
+        "reasoning_tokens": 1572
+      }
+    },
+    "upload_http_status": 200,
+    "response_http_status": 200,
+    "response_status": "completed",
+    "reasoning_effort": "low",
+    "max_output_tokens": 4000,
+    "prompt_version": "v2",
+    "task_hint": null,
+    "notice": "Original MP4 uploaded with audio intact when present; human review required."
+  },
+  "response": {
+    "schema_version": "1.0",
+    "source": {
+      "duration_ms": 14000.0,
+      "frame_manifest": "frames.json",
+      "mock": false,
+      "provider": "meta",
+      "video_name": "1793704202_0001_task_video.mp4",
+      "video_sha256": "33e23ee7a91cfde0f862f51675cc8315cb13e529617eda59a1da6e4acc09bf3d"
+    },
+    "steps": [
+      {
+        "concept": {
+          "action": "pick",
+          "done": "small round part held off teal surface in closed right gripper visible in cited frames; complete lift unverified beyond held position",
+          "object": "small round part",
+          "pre": "small round part resting on teal surface to right of rectangular plate, right gripper open and to the right",
+          "target": "teal work surface to right of rectangular plate"
+        },
+        "end_ms": 3800,
+        "evidence": "In frames frame-000002, frame-000003, frame-000004 the right gripper moves left from the right edge toward the upper small round part on the teal surface, closes around it and lifts it; at frame-000004 the part is no longer on the table and is held in the closed right gripper while the left gripper remains open and idle.",
+        "id": "step-001",
+        "source_frame_refs": [
+          "frame-000002",
+          "frame-000003",
+          "frame-000004"
+        ],
+        "start_ms": 800
+      },
+      {
+        "concept": {
+          "action": "place",
+          "done": "small round part resting on one stud of rectangular plate with right gripper open and clear, visible in cited frames; tightening/securing unverified",
+          "object": "small round part",
+          "pre": "small round part held in closed right gripper above teal surface",
+          "target": "upper stud on rectangular plate (stud nearest top of frame, orientation uncertain)"
+        },
+        "end_ms": 7500,
+        "evidence": "In frames frame-000005, frame-000006, frame-000007, frame-000008 the right gripper carrying the small round part moves left over the rectangular plate, lowers onto the upper stud and then opens; at frame-000008 the part is seen on the upper stud and the right gripper is open and beginning to retract, with one small round part remaining on the table.",
+        "id": "step-002",
+        "source_frame_refs": [
+          "frame-000005",
+          "frame-000006",
+          "frame-000007",
+          "frame-000008"
+        ],
+        "start_ms": 3800
+      },
+      {
+        "concept": {
+          "action": "pick",
+          "done": "second small round part held off teal surface in closed right gripper visible in cited frames; complete lift unverified beyond held position",
+          "object": "small round part",
+          "pre": "one small round part remaining on teal surface to right of rectangular plate, one small round part already on rectangular plate stud, right gripper open",
+          "target": "teal work surface to right of rectangular plate"
+        },
+        "end_ms": 10500,
+        "evidence": "In frames frame-000009, frame-000010, frame-000011 the right gripper moves right away from the plate toward the remaining small round part on the teal surface, closes around it and lifts it; at frame-000011 the table position is empty and the part is held in the closed right gripper.",
+        "id": "step-003",
+        "source_frame_refs": [
+          "frame-000009",
+          "frame-000010",
+          "frame-000011"
+        ],
+        "start_ms": 7500
+      },
+      {
+        "concept": {
+          "action": "place",
+          "done": "small round part resting on remaining stud of rectangular plate with right gripper open and clear, visible in cited frames; tightening/securing unverified",
+          "object": "small round part",
+          "pre": "second small round part held in closed right gripper above teal surface",
+          "target": "lower stud on rectangular plate (stud nearest bottom of frame, orientation uncertain)"
+        },
+        "end_ms": 14000,
+        "evidence": "In frames frame-000012, frame-000013, frame-000014 the right gripper carrying the second small round part moves left over the rectangular plate, lowers onto the remaining lower stud and then opens; at frame-000014 both studs of the rectangular plate have a small round part resting on them and the right gripper is open and retracted to the right.",
+        "id": "step-004",
+        "source_frame_refs": [
+          "frame-000012",
+          "frame-000013",
+          "frame-000014"
+        ],
+        "start_ms": 10500
+      }
+    ]
+  }
+}

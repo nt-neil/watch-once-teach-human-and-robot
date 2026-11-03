@@ -23,13 +23,13 @@ sys.path.insert(0, str(APP_DIR / "export"))
 
 from server import (  # noqa: E402
     EXAMPLES,
-    MAX_PAID_CALLS,
-    MAX_PAID_USD,
     RUNS_DIR,
     clean_path_text,
     effective_meta_key,
+    get_limits,
     list_runs,
     load_budget,
+    mock_fixture_matches,
     safe_run_dir,
     save_budget,
 )
@@ -44,6 +44,9 @@ except ImportError:
 
 server = Server("watch-once")
 
+# MCP keeps the 1.2/1.3 choice; the web UI is fixed to 1.2.
+MODEL_CHOICES = ("muse-spark-1.2", "muse-spark-1.3")
+
 TOOLS = [
     ("list_examples", "List built-in example videos.",
      {"type": "object", "properties": {}}),
@@ -53,8 +56,13 @@ TOOLS = [
           "path": {"type": "string", "description": "MP4 under app/ (example or path, not both)"},
           "example": {"type": "string", "description": "Built-in example id"},
           "provider": {"type": "string", "enum": ["mock", "meta"], "default": "mock"},
+          "model": {"type": "string", "enum": ["muse-spark-1.2", "muse-spark-1.3"],
+                    "default": "muse-spark-1.2",
+                    "description": "Meta model for provider=meta"},
           "confirm_paid": {"type": "boolean", "default": False,
                            "description": "Required true for provider=meta"},
+          "task_hint": {"type": "string", "default": "",
+                       "description": "Short operator hint, naming help only (<=200 chars)"},
       }}),
     ("get_result", "Read a finished run: manual + operations + state.",
      {"type": "object",
@@ -103,7 +111,7 @@ def resolve_video(path, example):
     return v
 
 
-def run_cli_blocking(video, provider):
+def run_cli_blocking(video, provider, model="muse-spark-1.2", task_hint=""):
     out_name = f"mcp-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     out_dir = RUNS_DIR / out_name
     cmd = [sys.executable, "-B", "cli.py", str(video),
@@ -112,6 +120,10 @@ def run_cli_blocking(video, provider):
     env = None
     if provider == "meta":
         cmd.append("--confirm-paid-api")
+        cmd += ["--model", model]
+        hint = " ".join(str(task_hint or "").split())[:200]
+        if hint:
+            cmd += ["--task-hint", hint]
         if not os.environ.get("META_API_KEY", "").strip():
             key = effective_meta_key()
             if key:
@@ -156,22 +168,31 @@ async def handle_call_tool(name, arguments):
         if name == "list_examples":
             return text_result([{"id": k, "label": v[0]} for k, v in EXAMPLES.items()])
         if name == "list_runs":
-            return text_result(list_runs())
+            return text_result(list_runs(include_mock=True))
         if name == "analyze_video":
             provider = args.get("provider", "mock")
             if provider not in ("mock", "meta"):
                 raise ValueError("provider must be mock or meta")
+            model = args.get("model", "muse-spark-1.2")
+            if model not in MODEL_CHOICES:
+                raise ValueError("model must be muse-spark-1.2 or muse-spark-1.3")
             video = resolve_video(args.get("path", ""), args.get("example", ""))
+            if provider == "mock" and not mock_fixture_matches(video):
+                raise ValueError("fixture does not match this video "
+                                 "(mock supports only the synthetic clip)")
             if provider == "meta":
                 if args.get("confirm_paid") is not True:
                     raise ValueError("provider=meta needs confirm_paid=true")
                 b = load_budget()
-                if int(b.get("paid_calls", 0)) >= MAX_PAID_CALLS or \
-                        float(b.get("spend_usd", 0.0)) >= MAX_PAID_USD:
-                    raise ValueError("paid budget exhausted (3 calls / $0.10)")
+                lim = get_limits()
+                if int(b.get("paid_calls", 0)) >= lim["max_calls"] or \
+                        float(b.get("spend_usd", 0.0)) >= lim["max_usd"]:
+                    raise ValueError(
+                        f"daily budget exhausted ({lim['max_calls']} calls / ${lim['max_usd']:.2f})")
                 if not effective_meta_key():
                     raise ValueError("no META_API_KEY (export it or use app/.env)")
-            return text_result(await asyncio.to_thread(run_cli_blocking, video, provider))
+            hint = " ".join(str(args.get("task_hint", "") or "").split())[:200]
+            return text_result(await asyncio.to_thread(run_cli_blocking, video, provider, model, hint))
         if name == "get_result":
             d = safe_run_dir(args.get("run_id", ""))
             if d is None:

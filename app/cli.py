@@ -31,6 +31,7 @@ def manual(document, manifest):
         lines.extend([f"## {step['id']} · {step['start_ms']}–{step['end_ms']} ms", ""])
         for key, value in step["concept"].items():
             lines.append(f"- **{key}**：{html.escape(value)}")
+        lines.append(f"- **evidence**：{html.escape(step.get('evidence', ''))}")
         lines.append("")
         for ref in step["source_frame_refs"]:
             frame = frames[ref]
@@ -43,7 +44,7 @@ def manual(document, manifest):
 def run(args):
     if not Path(args.workspace_path).is_absolute():
         raise AppError("--workspace-path must be an absolute workspace root.")
-    provider = (MetaProvider(args.model, args.confirm_paid_api) if args.provider == "meta"
+    provider = (MetaProvider(args.model, args.confirm_paid_api, args.prompt_version, args.task_hint) if args.provider == "meta"
                 else MockProvider(args.mock_response or APP_DIR / "fixtures/synthetic-response.json"))
     if args.provider == "meta" and args.mock_response:
         raise AppError("--mock-response is only valid with --provider mock.")
@@ -88,6 +89,8 @@ def parser():
     result.add_argument("--provider", choices=("mock", "meta"), default="mock")
     result.add_argument("--model", choices=("muse-spark-1.2", "muse-spark-1.3"), default="muse-spark-1.2")
     result.add_argument("--confirm-paid-api", action="store_true", help="Explicitly permit a paid original-MP4 upload and inference")
+    result.add_argument("--prompt-version", choices=("v1", "v2"), default="v2")
+    result.add_argument("--task-hint", default="", help="Short operator hint, naming help only (<=200 chars)")
     result.add_argument("--mock-response", help='JSON fixture with only {"steps": [...]}')
     result.add_argument("--sample-interval-ms", type=int, default=1000)
     result.add_argument("--out", help="New output directory inside app/; default runs/<UTC timestamp>")

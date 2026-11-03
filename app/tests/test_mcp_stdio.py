@@ -82,6 +82,19 @@ class McpStdioTests(unittest.TestCase):
                                  "export", "list_runs", "send_to_navide"})
         ex = call("tools/call", {"name": "list_examples", "arguments": {}})
         self.assertIn("synthetic", ex["content"][0]["text"])
+        schema = next(t for t in tools["tools"] if t["name"] == "analyze_video")
+        self.assertEqual(schema["inputSchema"]["properties"]["model"]["enum"],
+                         ["muse-spark-1.2", "muse-spark-1.3"])
+        self.assertIn("task_hint", schema["inputSchema"]["properties"])
+        bad_model = call("tools/call", {"name": "analyze_video",
+                                       "arguments": {"example": "synthetic", "model": "gpt-9"}})
+        self.assertTrue(bad_model.get("isError"))
+        mismatch = call("tools/call", {"name": "analyze_video",
+                                      "arguments": {"example": "m1", "provider": "mock"}})
+        self.assertTrue(mismatch.get("isError"))
+        if "example file missing" in mismatch["content"][0]["text"]:
+            self.skipTest("M1 clip not present on this machine")
+        self.assertIn("fixture does not match", mismatch["content"][0]["text"])
         an = call("tools/call", {"name": "analyze_video",
                                  "arguments": {"example": "synthetic", "provider": "mock"}})
         self.assertFalse(an.get("isError"), an["content"][0]["text"][:300])
