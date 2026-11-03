@@ -21,7 +21,7 @@ Navide 本體、Muse CLI／Muse Code、Meta 模型與服務（包括 Muse Spark�
 
 本次 `real-smoke` 使用原始 14 秒 MP4，完整上傳，沒有截取時段、重編碼原影片或變速。手冊圖片實際做了抽幀、縮放至最寬 640 px、另存 JPEG；這些圖片不是作者提供的獨立完成證據。素材清單另有準備好的 `local_clip` 與其「僅轉碼」說明，不能套用為本次 `local_original` 輸入的處理紀錄。
 
-署名與處理差異可追溯至 [selected-app-sources.json](../materials-survey/continuation/selected-app-sources.json) 的 `selected[id=M1]` 及[真手冊來源段](runs/real-smoke/manual.md)。README 保留完整作者／授權資訊；模型輸出內容及既有 run 不因這次文件補充而改動。
+署名與處理差異可追溯至 素材清單（未公開） 的 `selected[id=M1]` 及[真手冊來源段](evidence/real-smoke/manual.md)。README 保留完整作者／授權資訊；模型輸出內容及既有 run 不因這次文件補充而改動。
 
 ## 安裝
 
@@ -168,13 +168,13 @@ python3 cli.py runs/synthetic-fixture.mp4 \
 
 M1 是 **4 個操作、2 次裝配**，不是 4 次裝配；目前這段驗收僅 **n=1**，不能泛化到其他物件或工序。接觸時夾爪遮擋、零件類型及穩固夾持仍有未知；原片無音軌，不能據此驗證音訊／旁白理解。
 
-後續 root 已回報以自己的 pane MCP 建立並回讀 mock 與 real 計畫；各 run 的 `navide-mcp-receipt.json` 記錄此事。M1 real 計畫為 draft、4 pending、全部 owner=user，沒有 agent 執行。CLI 原始 `submission.json` 仍維持 exported_not_sent，standalone adapter 仍未真連線驗證。完整費用、產物、人工驗收界線與 Muse 指揮交接見 [HANDOFF.md](HANDOFF.md)。
+後續 root 已回報以自己的 pane MCP 建立並回讀 mock 與 real 計畫；各 run 的 `navide-mcp-receipt.json` 記錄此事。M1 real 計畫為 draft、4 pending、全部 owner=user，沒有 agent 執行。CLI 原始 `submission.json` 仍維持 exported_not_sent，standalone adapter 仍未真連線驗證。完整費用、產物、人工驗收界線與 Muse 指揮交接見內部 HANDOFF（未公開）。
 
 上述費用是 M1／模型比較的歷史快照，包含首輪未知費用的 US$0.5 預留，不是專案當前總帳單；最新彙總見下方文件收尾紀錄。
 
 ## W1 唯一重試結果與後續界線
 
-W1 唯一一次粒度重試已結束：原輪 **0/4 → 重試 1/4，仍未通過**。唯一配對的開始／結束誤差為 **2.5／0.5 秒**；GT 本身約 **±2 秒**，穩健 ≤3 秒仍為 **0/4**，不能稱為精密時間驗收通過。回覆縮成 4 列不等於四步都辨識成功。保留原 GT，不再重試。連續細動作中的板件身份辨識與結構追蹤列為已知限制；Demo 主打 M1，但 M1 通過仍僅 **n=1**，不代表通用能力。素材 **9 支全數核驗**也不等於 9 支都經模型驗收通過。來源：[W1 粒度重試報告](runs/w1-granularity-1030/report.md)。
+W1 唯一一次粒度重試已結束：原輪 **0/4 → 重試 1/4，仍未通過**。唯一配對的開始／結束誤差為 **2.5／0.5 秒**；GT 本身約 **±2 秒**，穩健 ≤3 秒仍為 **0/4**，不能稱為精密時間驗收通過。回覆縮成 4 列不等於四步都辨識成功。保留原 GT，不再重試。連續細動作中的板件身份辨識與結構追蹤列為已知限制；Demo 主打 M1，但 M1 通過仍僅 **n=1**，不代表通用能力。素材 **9 支全數核驗**也不等於 9 支都經模型驗收通過。來源：W1 粒度重試報告（未公開；結論：0/4 → 重試 1/4，仍未通過，連續細動作列為已知限制）。
 
 本次 W1 重試新增 usage 推算費用 **US$0.020043**。依指揮最新彙總，已知費用 **US$0.08082825**，加舊失敗未知費用預留 **US$0.50**，保守額度占用 **US$0.58082825**；這不是帳單核對，未知費用與預留不得當成實際支出。
 
