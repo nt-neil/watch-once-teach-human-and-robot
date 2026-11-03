@@ -56,8 +56,6 @@ UPLOAD_DIR = RUNS_DIR / "web-uploads"
 BUDGET_FILE = RUNS_DIR / "web-ui-budget.json"
 EVIDENCE_DIR = APP_DIR / "evidence"
 MAX_UPLOAD = 100 * 1024 * 1024
-ALLOWED_EXTS = (".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi")
-EXT_LABEL = "MP4 / MOV / M4V / WebM / MKV / AVI"
 DEFAULT_MAX_CALLS = 20
 DEFAULT_MAX_USD = 1.00
 DEFAULT_MODEL = "muse-spark-1.2"
@@ -397,7 +395,8 @@ def scrub_video_name(raw):
     return re.sub(r"[\\/]", "_", Path(raw or "video").name)[:80]
 
 
-UNREADABLE_MSG = "This file cannot be read. It may be damaged, or not a real video."
+NOT_VIDEO_MSG = "This is not a video file, or the file is damaged."
+CONVERT_FAIL_MSG = "Could not convert this {fmt} file. Try exporting it as MP4 first."
 
 
 class UploadError(ValueError):
@@ -412,48 +411,96 @@ def _sha256_file(path):
     return h.hexdigest()
 
 
-def _ffprobe_ok(path):
+def probe_video(path):
+    """Return {video_codec, audio_codec|None, duration, vfr, format} or None.
+
+    Extension-agnostic: any file ffprobe can read with a video stream counts.
+    """
     try:
-        r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0",
-                            "-show_entries", "stream=codec_type", "-of", "csv=p=0",
-                            str(path)], capture_output=True, text=True, timeout=60)
-    except (OSError, subprocess.TimeoutExpired):
-        return False
-    return r.returncode == 0 and "video" in (r.stdout or "")
+        r = subprocess.run(["ffprobe", "-v", "error", "-show_streams", "-show_format",
+                            "-of", "json", str(path)],
+                           capture_output=True, text=True, timeout=60)
+        info = json.loads(r.stdout or "{}")
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return None
+    if r.returncode != 0:
+        return None
+    vstreams = [s for s in info.get("streams", []) if s.get("codec_type") == "video"]
+    if not vstreams:
+        return None
+    v = vstreams[0]
+    a = next((s for s in info.get("streams", []) if s.get("codec_type") == "audio"), None)
+    try:
+        dur = float(info.get("format", {}).get("duration", 0) or 0)
+    except (TypeError, ValueError):
+        dur = 0.0
+    if dur <= 0:
+        try:
+            nb = int(v.get("nb_frames", 0) or 0)
+        except (TypeError, ValueError):
+            nb = 0
+        if nb <= 1:
+            return None  # still image, not a video
+        dur = 0.04 * nb
+    vfr = v.get("avg_frame_rate") not in (None, "0/0") and v.get("r_frame_rate") not in (None, "0/0") \
+        and v.get("avg_frame_rate") != v.get("r_frame_rate")
+    return {"video_codec": str(v.get("codec_name", "?")).lower(),
+            "audio_codec": (str(a.get("codec_name", "?")).lower() if a else None),
+            "duration": dur, "vfr": bool(vfr),
+            "format": str(info.get("format", {}).get("format_name", "?")).split(",")[0]}
+
+
+def _ffprobe_ok(path):
+    return probe_video(path) is not None
+
+
+def _needs_transcode(path, probed):
+    if Path(path).suffix.lower() != ".mp4":
+        return True
+    if probed["video_codec"] != "h264":
+        return True
+    if probed["audio_codec"] not in (None, "aac"):
+        return True
+    return probed["vfr"]
 
 
 def prepare_upload(src):
-    """Return (mp4_path, provenance). Non-MP4 is transcoded with local ffmpeg.
+    """Return (mp4_path, provenance). Anything not H.264+AAC MP4 is transcoded.
 
-    Raises UploadError with a plain-language message when the file is not a
-    readable video.
+    Raises UploadError with a plain-language message for non-video or failed
+    conversion.
     """
     src = Path(src)
-    ext = src.suffix.lower()
-    if ext not in ALLOWED_EXTS:
-        raise UploadError(f"Only video files are accepted ({EXT_LABEL}).")
-    if ext == ".mp4":
-        if not _ffprobe_ok(src):
-            raise UploadError(UNREADABLE_MSG)
+    probed = probe_video(src)
+    if probed is None:
+        raise UploadError(NOT_VIDEO_MSG)
+    if not _needs_transcode(src, probed):
         digest = _sha256_file(src)
         return src, {"original_name": src.name, "original_sha256": digest,
-                     "transcoded_sha256": digest, "note": "original mp4, no transcode"}
+                     "transcoded_sha256": digest, "note": "original mp4, no transcode",
+                     "source": f"{probed['format'].upper()} ({probed['video_codec'].upper()})"}
     dst = src.with_name(src.stem + "-upload.mp4")
+    cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(src),
+           "-c:v", "libx264", "-preset", "veryfast"]
+    if probed["vfr"]:
+        cmd += ["-r", "30"]
+    if probed["audio_codec"] is not None:
+        cmd += ["-c:a", "aac"]
+    cmd += ["-movflags", "+faststart", str(dst)]
+    fmt = probed["format"].upper()
     try:
-        r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(src),
-                            "-c:v", "libx264", "-preset", "veryfast",
-                            "-c:a", "aac", "-movflags", "+faststart", str(dst)],
-                           capture_output=True, text=True, timeout=300)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     except (OSError, subprocess.TimeoutExpired):
-        raise UploadError(UNREADABLE_MSG)
-    if r.returncode != 0 or not dst.is_file() or not _ffprobe_ok(dst):
+        raise UploadError(CONVERT_FAIL_MSG.format(fmt=fmt))
+    if r.returncode != 0 or not dst.is_file() or probe_video(dst) is None:
         try:
             dst.unlink()
         except OSError:
             pass
-        raise UploadError(UNREADABLE_MSG)
+        raise UploadError(CONVERT_FAIL_MSG.format(fmt=fmt))
     prov = {"original_name": src.name, "original_sha256": _sha256_file(src),
-            "transcoded_sha256": _sha256_file(dst), "note": "transcoded for upload"}
+            "transcoded_sha256": _sha256_file(dst), "note": "transcoded for upload",
+            "source": f"{fmt} ({probed['video_codec'].upper()})"}
     try:
         src.unlink()
     except OSError:
@@ -825,9 +872,9 @@ HOME_TMPL = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 <p class="fitnote">Best for: one person or machine doing one thing, 10–60s, steady camera, clear actions.</p>
 <p class="limitnote">Limits: step splitting is unstable — the same clip may split into 2 or 4 steps. Always review results by hand.</p>
 <label class="drop" id="drop" for="filein">
-<input type="file" name="video" id="filein" class="vh" accept=".mp4,.mov,.m4v,.webm,.mkv,.avi,video/mp4,video/quicktime,video/webm">
+<input type="file" name="video" id="filein" class="vh" accept="video/*,.mov,.mkv,.avi,.flv,.wmv,.ts,.mts,.m2ts,.3gp,.ogv,.gif">
 <span class="dropicon" aria-hidden="true">⇪</span>
-<span class="dropmsg">Drop a video here or click to choose · MP4 / MOV / M4V / WebM / MKV / AVI · max 100 MB · stays on this machine</span>
+<span class="dropmsg">Drop a video here or click to choose · any format ffmpeg can read · max 100 MB · stays on this machine</span>
 <span class="filebtnlike">Choose file</span>
 </label>
 <p class="filename" id="fname" hidden></p>
@@ -932,7 +979,7 @@ function tick(){{document.getElementById("elapsed").textContent=((Date.now()-t0)
 setInterval(tick,200);
 function detailFor(k,j,prov){{var d=j.detail||{{}};
   if(k===0){{var p=[];if(d.duration_s!=null)p.push(d.duration_s+" s");if(d.resolution)p.push(d.resolution);if(d.sha12)p.push("sha "+d.sha12);
-    var pre=d.converted_from?("Converted from "+d.converted_from+" to .mp4 for upload · "):"";
+    var pre=d.converted_from?("Converted from "+d.converted_from+" to MP4 (H.264) · "):"";
     return pre+(j.video_name||"video")+(p.length?" · "+p.join(" · "):" · reading file…");}}
   if(k===1){{if(d.sample_total)return "Sampled "+d.sample_total+" frames"+(d.sample_times_s&&d.sample_times_s.length?" at "+d.sample_times_s.join(", ")+" … s":"");
     if(d.frame_count)return d.frame_count+" frames so far";return "Waiting for frames…";}}
@@ -1117,9 +1164,7 @@ def run_cli_job(job_id, video_path, provider, task_hint=""):
         _push_event(job_id, time.time() - started_at,
                     f"Transcoded {provenance['original_name']} for upload")
         with jobs_lock:
-            orig = provenance["original_name"]
-            jobs[job_id]["converted_from"] = ("." + orig.rsplit(".", 1)[-1].lower()
-                                               if "." in orig else "?")
+            jobs[job_id]["converted_from"] = provenance.get("source", "?")
     cmd = [sys.executable, "-B", "cli.py", str(video_path),
            "--workspace-path", str(WORKSPACE), "--provider", provider,
            "--out", f"runs/{out_name}"]
@@ -1629,7 +1674,7 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             return self.send_html("<h1>Bad upload</h1>", 400)
         if length > MAX_UPLOAD + 1024:
-            return self.send_html("<h1>File too large (max 100 MB)</h1>", 400)
+            return self.send_html("<h1>File too large</h1><p>Max 100 MB. Try trimming or compressing it first.</p>", 400)
         body = self.rfile.read(length)
         fields, files = parse_multipart(body, m.group(1).strip().encode())
         provider = fields.get("provider", "meta")
@@ -1638,9 +1683,6 @@ class Handler(BaseHTTPRequestHandler):
         video = None
         if "video" in files and files["video"][0]:
             fname, data = files["video"]
-            if not fname.lower().endswith(ALLOWED_EXTS):
-                return self.send_html(
-                    f"<h1>Only video files accepted</h1><p>{EXT_LABEL} · max 100 MB.</p>", 400)
             UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
             safe = re.sub(r"[^A-Za-z0-9_.\-]", "_", Path(fname).name)[:60]
             video = UPLOAD_DIR / f"{int(time.time())}_{safe}"
@@ -1648,7 +1690,7 @@ class Handler(BaseHTTPRequestHandler):
         else:
             return self.send_html("<h1>Upload a file</h1>", 400)
         if not _ffprobe_ok(video):
-            return self.send_html(f"<h1>Cannot read this file</h1><p>{UNREADABLE_MSG}</p>", 400)
+            return self.send_html(f"<h1>Not a video file</h1><p>{NOT_VIDEO_MSG}</p>", 400)
         if provider == "mock" and not mock_fixture_matches(video):
             return self.send_html("<h1>Fixture does not match this video (mock supports only the synthetic clip)</h1>", 400)
         if provider == "meta":

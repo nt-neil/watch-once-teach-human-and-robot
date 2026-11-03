@@ -26,8 +26,8 @@ python3 -m venv .venv
 ```
 
 Needs Python 3.11+ and FFmpeg (`ffmpeg`, `ffprobe`). The UI is fixed to Meta
-Muse Spark (fixed 1.2): upload (MP4/MOV/M4V/WebM/MKV/AVI, max 100 MB;
-non-MP4 is transcoded locally) → tick the credit checkbox → Analyze.
+Muse Spark (fixed 1.2): upload (any video format ffmpeg can read, max
+100 MB; non-H.264+AAC is transcoded locally) → tick the credit checkbox → Analyze.
 Daily budget lives in `.env` (`WEB_MAX_CALLS_PER_DAY` / `WEB_MAX_USD_PER_DAY`,
 defaults 20 calls / US$1.00).
 The M1 clip is not in the repo (dataset license): to re-run it,

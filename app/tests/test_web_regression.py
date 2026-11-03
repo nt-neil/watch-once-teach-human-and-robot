@@ -206,7 +206,7 @@ class WebRegressionTests(unittest.TestCase):
         with WEB.jobs_lock:
             after = set(WEB.jobs)
         self.assertIn("400", head.splitlines()[0])
-        self.assertIn("Cannot read this file", data.decode())
+        self.assertIn("Not a video file", data.decode())
         self.assertNotIn("Fixture does not match", data.decode())
         self.assertEqual(started, [])
         self.assertEqual(before, after)
@@ -271,7 +271,7 @@ class WebRegressionTests(unittest.TestCase):
         self.assertNotIn("any video", html.lower())
         self.assertIn('id="drop"', html)
         self.assertIn("Drop a video here or click to choose", html)
-        self.assertIn("MP4 / MOV / M4V / WebM / MKV / AVI", html)
+        self.assertIn("any format ffmpeg can read", html)
         self.assertIn('<label class="drop"', html)
         self.assertIn("Choose file", html)
         self.assertIn('class="vh"', html)
@@ -457,17 +457,23 @@ class WebRegressionTests(unittest.TestCase):
                     self.assertEqual(r.returncode, 0,
                                      f"{name} script {i}: {r.stderr[:300]}")
 
-    def _make_clip(self, td, name):
+    def _make_clip(self, td, name, vcodec=None, acodec=None, noaudio=False, size="160x120",
+                   rate=10):
         import shutil
         import subprocess
         if shutil.which("ffmpeg") is None:
             self.skipTest("ffmpeg not present")
         p = Path(td) / name
-        r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi",
-                            "-i", "testsrc=duration=1:size=160x120:rate=10",
-                            "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
-                            "-shortest", str(p)],
-                           capture_output=True, text=True, timeout=60)
+        cmd = ["ffmpeg", "-y", "-v", "error", "-f", "lavfi",
+               "-i", f"testsrc=duration=1:size={size}:rate={rate}"]
+        if not noaudio:
+            cmd += ["-f", "lavfi", "-i", "sine=frequency=440:duration=1"]
+        if vcodec:
+            cmd += ["-c:v", vcodec]
+        if acodec and not noaudio:
+            cmd += ["-c:a", acodec]
+        cmd += ["-shortest", str(p)]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
         self.assertEqual(r.returncode, 0, r.stderr[:200])
         return p
 
@@ -493,22 +499,39 @@ class WebRegressionTests(unittest.TestCase):
             return codecs, dur
 
         with tempfile.TemporaryDirectory() as td:
-            for name in ("clip.mov", "clip.webm", "clip.mkv"):
-                src = self._make_clip(td, name)
+            cases = [("hevc.mov", "libx265", None, False),
+                     ("vp9.webm", "libvpx-vp9", None, False),
+                     ("c.3gp", "h263", "aac", False, "176x144"),
+                     ("c.ts", "mpeg2video", "mp2", False, "160x120", 25),
+                     ("c.mpg", "mpeg1video", "mp2", False, "160x120", 25),
+                     ("c.wmv", "wmv2", "wmav2", False),
+                     ("c.ogv", "libvpx", None, False),
+                     ("c.gif", "gif", None, True),
+                     ("noaudio.mp4", "libx264", None, True)]
+            for case in cases:
+                name, vc, ac, na = case[:4]
+                size = case[4] if len(case) > 4 else "160x120"
+                rate = case[5] if len(case) > 5 else 10
+                src = self._make_clip(td, name, vc, ac, na, size, rate)
                 _, dur_before = probe(src)
                 out, prov = WEB.prepare_upload(src)
-                self.assertTrue(out.is_file())
-                self.assertEqual(out.suffix, ".mp4")
+                self.assertTrue(out.is_file(), name)
+                self.assertEqual(out.suffix, ".mp4", name)
                 self.assertEqual(set(prov), {"original_name", "original_sha256",
-                                             "transcoded_sha256", "note"})
+                                             "transcoded_sha256", "note", "source"}, name)
                 self.assertEqual(prov["original_name"], name)
                 self.assertEqual(len(prov["original_sha256"]), 64)
                 self.assertEqual(len(prov["transcoded_sha256"]), 64)
+                if name == "noaudio.mp4":
+                    self.assertIn("no transcode", prov["note"])
+                    self.assertEqual(out, src)
+                    continue
                 self.assertIn("transcoded for upload", prov["note"])
                 codecs, dur_after = probe(out)
-                self.assertIn("h264", codecs)
-                self.assertIn("aac", codecs)
-                self.assertLess(abs(dur_after - dur_before), 0.5)
+                self.assertIn("h264", codecs, name)
+                if not na:
+                    self.assertIn("aac", codecs, name)
+                self.assertLess(abs(dur_after - dur_before), 0.5, name)
 
     def test_transcoded_clip_runs_mock_pipeline(self):
         import json
@@ -544,7 +567,19 @@ class WebRegressionTests(unittest.TestCase):
             bad.write_bytes(b"not a video at all")
             with self.assertRaises(Exception) as cm:
                 WEB.prepare_upload(bad)
-            self.assertIn("cannot be read", str(cm.exception))
+            self.assertIn("not a video file", str(cm.exception))
+            txt = Path(td) / "note.txt"
+            txt.write_text("hello")
+            with self.assertRaises(Exception) as cm:
+                WEB.prepare_upload(txt)
+            self.assertIn("not a video file", str(cm.exception))
+            png = Path(td) / "img.png"
+            png.write_bytes(bytes.fromhex(
+                "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+                "0000000d49444154789c626001000000ffff03000006000557bfabd40000000049454e44ae426082"))
+            with self.assertRaises(Exception) as cm:
+                WEB.prepare_upload(png)
+            self.assertIn("not a video file", str(cm.exception))
 
     def test_post_mov_passes_extension_check(self):
         # A non-fixture .mov reaches the mock guard (not the extension gate),
@@ -563,7 +598,7 @@ class WebRegressionTests(unittest.TestCase):
             [("provider", "mock")],
             file_content=b"MZ fake", filename="run.exe")
         self.assertIn("400", head.splitlines()[0])
-        self.assertIn("Only video files", data.decode())
+        self.assertIn("not a video file", data.decode())
         self.assertEqual(started, [])
 
     def test_plain_cli_error_mapping(self):

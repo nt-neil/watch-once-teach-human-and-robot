@@ -198,7 +198,7 @@ python3 server.py --port 18766
 # open http://127.0.0.1:18766/ in a browser
 ```
 
-功能：固定 Meta Muse Spark（無 provider 選單）。拖放／點選上傳影片（MP4／MOV／M4V／WebM／MKV／AVI，上限 100 MB；非 MP4 由本機 ffmpeg 轉 H.264＋AAC，不變速不裁切，provenance 記入 transcode.json）→ 可填一句 task-hint（命名輔助，不代看影片）→ 勾白話付費確認 → Analyze（server 端強制每日上限，見 Settings）→ 左右雙欄（手冊＋截圖／操作 JSON，每步附 evidence 可見證據句）→ 匯出（LeRobot 標註／VLA 序列／規劃步驟，見 `export/README.md`，僅標註層）→ Navide payload 預覽（未實連照實標示）→ 歷史 run 瀏覽（只列真推論）。無金鑰時 Analyze 換成 Settings 引導；首頁 hero 有 M1 v2 真推論 before／after 靜態對照（純說明圖，無連結）。等分步驟（各段差 5% 內）標 needs-review 警告，不擋 run。失敗一律白話（401／逾時／斷線／壞檔皆有對應文案，不卡進度頁）。驗收：tests 91/91（＋1 環境 skip）、sha256 846/846（7 檔預期變動已更新基準）；live e2e 19/19；畫面經 13 輪截圖自評＋真瀏覽器實機操作驗收。
+功能：固定 Meta Muse Spark（無 provider 選單）。拖放／點選上傳影片（ffmpeg 能讀的影片格式都支援，不看副檔名，以 ffprobe 讀到影像軌為準，測過：MP4／MOV 含 HEVC／M4V／WebM 含 VP9／MKV／AVI／3GP／TS／MPG／WMV／OGV／GIF／無音軌 MP4；上限 100 MB；非 H.264＋AAC 由本機 ffmpeg 轉碼，不變速不裁切，VFR 轉固定幀率，provenance 記入 transcode.json）→ 可填一句 task-hint（命名輔助，不代看影片）→ 勾白話付費確認 → Analyze（server 端強制每日上限，見 Settings）→ 左右雙欄（手冊＋截圖／操作 JSON，每步附 evidence 可見證據句）→ 匯出（LeRobot 標註／VLA 序列／規劃步驟，見 `export/README.md`，僅標註層）→ Navide payload 預覽（未實連照實標示）→ 歷史 run 瀏覽（只列真推論）。無金鑰時 Analyze 換成 Settings 引導；首頁 hero 有 M1 v2 真推論 before／after 靜態對照（純說明圖，無連結）。等分步驟（各段差 5% 內）標 needs-review 警告，不擋 run。失敗一律白話（401／逾時／斷線／非影片／轉檔失敗皆有對應文案，不卡進度頁）。驗收：tests 91/91（＋1 環境 skip）、sha256 846/846（7 檔預期變動已更新基準）；live e2e 19/19；畫面經 13 輪截圖自評＋真瀏覽器實機操作驗收。
 
 進度頁（/job/）顯示 7 段白話進度（每段附真實資料：檔名／長度／解析度／SHA、抽幀時刻、驗證細項、費用）＋畫格 filmstrip＋Activity log。reduced-motion 下無動畫。
 
