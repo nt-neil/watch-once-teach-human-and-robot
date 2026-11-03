@@ -2,7 +2,7 @@
 
 本目錄是比賽期間新做的第二階段 CLI 骨架，對齊核准計畫上方當前 Goals：同一步產出人可讀手冊與 `object/action/target/pre/done` 五個字串，再轉成 Navide 任務。Navide 本體既有的派工／執行／驗收不是本次新作。沒有沿用第 423 行起舊附錄的固定角色或多套 schema。
 
-這份 README 記錄本地 CLI 骨架與 M1 smoke 的驗收狀態。這版提供本地 MP4 檢查與抽幀、明示 mock fixture、操作概念驗證、Markdown 手冊、`plan_create` payload，以及可選的真 Meta／MCP adapter。web UI、SAM 追蹤、Muse Image 重畫、agent 自動執行與執行紀錄回流均不列為本骨架已完成項目。所有任務維持 `pending`；由外層人工判斷實體／軟體步驟、執行權限與驗收，不能用此骨架宣稱 Agentic 閉環已完成。
+這份 README 記錄本地 CLI 骨架與 M1 smoke 的驗收狀態。這版提供本地 MP4 檢查與抽幀、明示 mock fixture、操作概念驗證、Markdown 手冊、`plan_create` payload，以及可選的真 Meta／MCP adapter。web UI 已於 11/3 後補完成（見下方「Web UI added 11/3」段）；SAM 追蹤、Muse Image 重畫、agent 自動執行與執行紀錄回流仍不列為本骨架已完成項目。所有任務維持 `pending`；由外層人工判斷實體／軟體步驟、執行權限與驗收，不能用此骨架宣稱 Agentic 閉環已完成。
 
 ## 比賽期間新做的部分
 
@@ -21,7 +21,7 @@ Navide 本體、Muse CLI／Muse Code、Meta 模型與服務（包括 Muse Spark�
 
 本次 `real-smoke` 使用原始 14 秒 MP4，完整上傳，沒有截取時段、重編碼原影片或變速。手冊圖片實際做了抽幀、縮放至最寬 640 px、另存 JPEG；這些圖片不是作者提供的獨立完成證據。素材清單另有準備好的 `local_clip` 與其「僅轉碼」說明，不能套用為本次 `local_original` 輸入的處理紀錄。
 
-署名與處理差異可追溯至 repo 頂層 README「素材來源與授權」段（`selected[id=M1]`）；`runs/real-smoke/manual.md` 為未公開的執行產物，見 demo 影片。README 保留完整作者／授權資訊。
+署名與處理差異可追溯至 repo 頂層 README「素材來源與授權」段（`selected[id=M1]`）；`evidence/real-smoke/manual.md` 為本次公開的執行產物（同目錄另有 operations、provider result、費用報告與 320px 影格；金鑰與 provider 私有 ID 已遮罩）。README 保留完整作者／授權資訊。
 
 ## 安裝
 
@@ -162,7 +162,7 @@ python3 cli.py runs/synthetic-fixture.mp4 \
 
 後續授權真 smoke（同日）：第一次 CLI exit 2，noncompleted 回覆被拒絕；證據保留於 `runs/real-smoke-attempt-1/`，詳細 status／usage 因上述舊缺陷未知，原因不得推定為 token cap。修正診斷保存後，明確 low reasoning、cap 4000 再呼叫一次，CLI exit 0，upload/responses HTTP 200、completed，`runs/real-smoke/` 完成 14 個抽幀 → 真 provider → 五欄／時間／引用驗證 → 手冊 → 4 個 pending 待辦 payload；未送 MCP、未派工。原有六測例未重跑，只對新增失敗紀錄缺陷做聚焦驗證。
 
-成功輪 input 2704（cached 0）、output 2340（已含 reasoning 1542）；依 [Meta Standard 費率](https://dev.meta.ai/docs/pricing-rate-limits) input $1.25/M、output $4.25/M，usage 推算 **US$0.013325**，並非帳單核對。指揮先前比較費用 US$0.026018，加成功輪為已知 **US$0.039343**；首次失敗未知另預留 **US$0.5**，保守額度占用 **US$0.539343**，不可把預留當實際帳單。細節見 `runs/real-smoke/run-report.json`。
+成功輪 input 2704（cached 0）、output 2340（已含 reasoning 1542）；依 [Meta Standard 費率](https://dev.meta.ai/docs/pricing-rate-limits) input $1.25/M、output $4.25/M，usage 推算 **US$0.013325**，並非帳單核對。指揮先前比較費用 US$0.026018，加成功輪為已知 **US$0.039343**；首次失敗未知另預留 **US$0.5**，保守額度占用 **US$0.539343**，不可把預留當實際帳單。細節見 `evidence/real-smoke/run-report.json`（四組證據 runs 見 `evidence/README.md`）。
 
 真輸出僅代表結構驗證成功，語意及完成判斷仍待人工驗收。零件描述中的 `possibly nut` 保留不確定性，不可改稱確定螺帽；`grasp verified` 仍須人工查證。步驟 2/4 的最終就位／鎖緊未驗證，3.5/7/10.5/14 秒區間邊界不等於精確完成證據。單支無聲影片無法證明通用性或達成準確率／誤差門檻。
 
@@ -182,8 +182,65 @@ Muse 已指定 B 段改由 root 的 `pane_mcp` 建單／回讀／處理狀態；
 
 ## 本地狀態與交件邊界
 
-本 README 只記錄本地 CLI、文件與上述驗收快照，不新增或取代 startup 相關既有交件指示，也不宣稱已通過參賽／交件審核。啟動方式仍是前述 CLI 安裝與執行命令；本文件沒有新增 web 入口或長存 server。
+本 README 只記錄本地 CLI、文件與上述驗收快照，不新增或取代 startup 相關既有交件指示，也不宣稱已通過參賽／交件審核。啟動方式仍是前述 CLI 安裝與執行命令；web 入口見下方「Web UI added 11/3」段（本地 single-process server，用完即關，非長存服務）。
 
 既有 180 秒／3 分鐘 demo 分鏡屬交件準備，不等於已完成錄影、旁白或送件；尚未完成的 SAM、Image、執行回流不得當作實作成果呈現。依目前核准計畫的 review note，**公開 repo、發文與 Submit 仍須本人核准**；規劃要求公開 repo 不等於已取得公開授權。這次只補本地 README，未公開、commit、部署或提交作品。
 
 `.gitignore` 排除 `.env`、憑證、下載影片、生成資料與虛擬環境。fixtures 只有自製公開文字／生成程式。未新增未授權素材，也沒有 commit、部署、長存 server 或設備控制。
+
+## Web UI added 11/3
+
+Muse Code 當日新增的最小本機網頁（`web/server.py`，標準庫、無新依賴），只包 CLI、不改核心與既有 runs。只綁 127.0.0.1。
+
+```sh
+cd app/web
+python3 server.py --port 18766
+# open http://127.0.0.1:18766/ in a browser
+```
+
+功能：上傳 MP4 或選內建範例（synthetic／M1）→ 分析 → 左右雙欄（時間軸手冊／操作 JSON）→ 匯出（LeRobot 標註／VLA 序列／規劃步驟，見 `export/README.md`，僅標註層，未在真機器人或 VLA 跑過）→ Navide payload 預覽（未實連照實標示）→ 歷史 run 瀏覽。
+
+mock 與真推論：預設 mock（免費，畫面標 MOCK badge，用手寫 fixture，不代表模型輸出）；選 Meta＋勾確認才做真推論（muse-spark-1.2，server 端強制上限 3 次／US$0.10，啟動前需 export META_API_KEY，金鑰不寫檔不印出）。
+
+驗收：後端 63 項全過、live e2e 18/18、tests 12/12、sha256 零非預期變動；畫面經 7 輪截圖自評定版＋真瀏覽器實機操作驗收。
+
+## Run it locally（從零部署到本機）
+
+需求：Python 3.11 以上、FFmpeg（含 ffmpeg 與 ffprobe）、git。server 本體只用標準庫；CLI 需要 requirements（jsonschema＋httpx）。
+
+```sh
+# 1. 下載
+git clone https://github.com/nt-neil/watch-once-teach-human-and-robot.git
+cd watch-once-teach-human-and-robot/app
+
+# 2. 建 venv 並裝依賴（環境放在專案內，不要裝到系統 Python）
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+
+# 3. 產生內建 synthetic 範例（M1 範例需自行依授權下載，不附在 repo）
+.venv/bin/python fixtures/make_synthetic.py
+
+# 4. 啟動（一定要用 .venv 的 python：server 用同一個直譯器跑 CLI）
+.venv/bin/python web/server.py --port 18766
+# open http://127.0.0.1:18766/ in a browser
+```
+
+5. 先用 mock 試跑：首頁按 Try an example → 選 Synthetic fixture → Analyze（免費，結果掛 MOCK badge，用手寫 fixture，不代表模型輸出）。
+6. 再跑真推論（二選一）：`export META_API_KEY=…` 後重啟 server，或 `cp .env.example .env` 填入金鑰（.env 已在 .gitignore，不用重啟）。首頁會顯示 `Meta API key: configured / not configured`（只顯示狀態，不顯示值）。然後選 Meta＋勾確認 → Analyze（muse-spark-1.2，server 端強制上限 3 次／US$0.10，約 US$0.02／次）。
+
+常見錯誤：
+
+- `ffmpeg/ffprobe is missing` → 沒裝 FFmpeg（macOS：`brew install ffmpeg`）。
+- `Address already in use` → port 被佔用，換一個 `--port` 或先關掉佔用的行程。
+- `Server has no META_API_KEY` → 照第 6 步設金鑰；沒設時 Meta 選項旁有設定說明。
+
+## MCP server（給 agent 呼叫）
+
+`mcp_server.py` 用官方 MCP SDK（stdio），只包既有流程、不改核心。tools：`list_examples`、`analyze_video`（mock 免費；meta 需 `confirm_paid: true`，與 Web UI 共用 3 次／US$0.10 上限）、`get_result`、`send_to_navide`（payload 預覽，未實連）、`export`（lerobot／vla／plan）、`list_runs`。路徑只收 app/ 內或內建範例；錯誤不洩漏絕對路徑與金鑰。
+
+```sh
+.venv/bin/python -m pip install -r requirements-mcp.txt
+.venv/bin/python mcp_server.py   # stdio，給 MCP client 啟動
+```
+
+Claude Code／Muse Code 設定範（`mcpServers`，路徑換成你的 clone）：見 `mcp.example.json`。Navide：在 pane 內以 stdio 啟動本 server 即可（本專案即以 pane 代送方式運作）。

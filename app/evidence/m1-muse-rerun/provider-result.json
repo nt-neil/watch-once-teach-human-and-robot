@@ -1,0 +1,15 @@
+{
+  "executor": "Muse Code (proxy transport)",
+  "model": "muse-spark-1.2",
+  "usage": {
+    "input_tokens": 2704,
+    "output_tokens": 2005,
+    "input_tokens_details": {
+      "cached_tokens": 0
+    },
+    "output_tokens_details": {
+      "reasoning_tokens": 1574
+    }
+  },
+  "file_id": "file-REDACTED"
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": "1.0",
+  "source": {
+    "duration_ms": 14000.0,
+    "frame_manifest": "frames.json",
+    "mock": false,
+    "provider": "meta",
+    "video_name": "0001_task_video.mp4",
+    "video_sha256": "33e23ee7a91cfde0f862f51675cc8315cb13e529617eda59a1da6e4acc09bf3d"
+  },
+  "steps": [
+    {
+      "concept": {
+        "action": "picks and positions",
+        "done": "small round part appears seated on upper stud in later frames; secure tightening unverified",
+        "object": "right robotic gripper",
+        "pre": "two small round parts on blue surface to right of metal block; upper stud exposed",
+        "target": "small round part onto upper stud of metal block"
+      },
+      "end_ms": 7000,
+      "id": "step-001",
+      "source_frame_refs": [
+        "frame-000001",
+        "frame-000002",
+        "frame-000003",
+        "frame-000004",
+        "frame-000005",
+        "frame-000006",
+        "frame-000007"
+      ],
+      "start_ms": 0
+    },
+    {
+      "concept": {
+        "action": "picks and positions",
+        "done": "small round part appears seated on lower stud in later frames; secure tightening unverified",
+        "object": "right robotic gripper",
+        "pre": "one small round part remains on surface; upper stud now occupied; lower stud exposed",
+        "target": "small round part onto lower stud of metal block"
+      },
+      "end_ms": 14000,
+      "id": "step-002",
+      "source_frame_refs": [
+        "frame-000008",
+        "frame-000009",
+        "frame-000010",
+        "frame-000011",
+        "frame-000012",
+        "frame-000013",
+        "frame-000014"
+      ],
+      "start_ms": 7000
+    }
+  ]
+}

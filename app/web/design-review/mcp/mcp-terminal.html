@@ -1,0 +1,47 @@
+<!doctype html><meta charset=utf-8><style>body{margin:0;background:#1e1f22}.w{margin:24px;border-radius:10px;overflow:hidden;box-shadow:0 8px 30px #0008}.b{background:#2d2f33;padding:8px 12px;color:#aaa;font:12px -apple-system}.b i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:6px}pre{margin:0;padding:16px 18px;background:#141518;color:#d6e2d6;font:13px/1.45 Menlo,monospace;white-space:pre-wrap}</style><div class=w><div class=b><i style=background:#ff5f57></i><i style=background:#febc2e></i><i style=background:#28c840></i> app — .venv/bin/python mcp_demo_client.py (real stdio MCP session, run web-20261103T083626Z = META muse-spark-1.2)</div><pre>$ mcp client → watch-once (stdio)
+tools: list_examples, analyze_video, get_result, export, list_runs, send_to_navide
+
+&gt; call_tool list_examples {}
+[
+ {
+  &quot;id&quot;: &quot;m1&quot;,
+  &quot;label&quot;: &quot;M1 AIST washers (14s, CC BY 4.0)&quot;
+ },
+ {
+  &quot;id&quot;: &quot;synthetic&quot;,
+  &quot;label&quot;: &quot;Test pattern (synthetic, for pipeline check)&quot;
+ }
+]
+
+&gt; call_tool get_result {&quot;run_id&quot;:&quot;web-20261103T083626Z&quot;}
+{
+ &quot;run_id&quot;: &quot;web-20261103T083626Z&quot;,
+ &quot;state&quot;: &quot;done&quot;,
+ &quot;steps&quot;: 2,
+ &quot;manual&quot;: &quot;# 操作手冊 [META — 模型輸出，待人工核對]\n\n來源：0001_task_video.mp4\nSHA256：`33e23ee7a91cfde0f862f51675cc8315cb13e529617eda59a1da6e4acc09bf3d`；來源時長：14000.0 ms\n\n這份手冊由同一份操作概念 JSON  …&quot;,
+ &quot;manual_truncated&quot;: false,
+ &quot;operations&quot;: &quot;{\&quot;schema_version\&quot;: \&quot;1.0\&quot;, \&quot;source\&quot;: {\&quot;duration_ms\&quot;: 14000.0, \&quot;frame_manifest\&quot;: \&quot;frames.json\&quot;, \&quot;mock\&quot;: false, \&quot;provider\&quot;: \&quot;meta\&quot;, \&quot;video_name\&quot;: \&quot;0001_task_video. …&quot;,
+ &quot;operations_truncated&quot;: false
+}
+
+&gt; call_tool export {&quot;run_id&quot;:&quot;web-20261103T083626Z&quot;,&quot;format&quot;:&quot;vla&quot;}
+{
+ &quot;format&quot;: &quot;vla-instruction-sequence/0.1&quot;,
+ &quot;episode_id&quot;: &quot;web-20261103T083626Z&quot;,
+ &quot;source_video_sha256&quot;: &quot;33e23ee7a91cfde0f862f51675cc8315cb13e529617eda59a1da6e4acc09bf3d&quot;,
+ &quot;steps&quot;: [
+  {
+   &quot;id&quot;: &quot;subtask-01&quot;,
+   &quot;instruction&quot;: &quot;place the small round part onto the upper stud of metal block&quot;,
+   &quot;start_s&quot;: 0.0,
+   &quot;end_s&quot;: 7.0
+  },
+  {
+   &quot;id&quot;: &quot;subtask-02&quot;,
+   &quot;instruction&quot;: &quot;place the small round part onto the lower stud of metal block&quot;,
+   &quot;start_s&quot;: 7.0,
+   &quot;end_s&quot;: 14.0
+  }
+ ]
+}
+</pre></div>

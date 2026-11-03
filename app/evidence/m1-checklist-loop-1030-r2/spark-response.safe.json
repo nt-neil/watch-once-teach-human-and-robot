@@ -1,0 +1,18 @@
+{
+  "http_status": 200,
+  "response_status": "completed",
+  "response_id": "resp-REDACTED",
+  "usage": {
+    "input_tokens": 3660,
+    "input_tokens_details": {
+      "cached_tokens": 0
+    },
+    "output_tokens": 1060,
+    "output_tokens_details": {
+      "reasoning_tokens": 716
+    },
+    "total_tokens": 4720
+  },
+  "output_text": "{\n  \"checks\": {\n    \"faithful_to_source\": true,\n    \"format_usable\": true,\n    \"uncertainty_preserved\": true\n  },\n  \"evidence_classes\": [\n    \"source_video\",\n    \"new_execution\",\n    \"generated_artifact\"\n  ],\n  \"reason\": \"Fidelity verified: 4 steps with exact times 0-3500, 3500-7000, 7000-10500, 10500-14000 and exact five strings per step - object/action/target/pre/done verbatim from source operations - including uncertainty phrases. Uncertainty preserved: does not assert physical success; done strings retain 'type uncertain, possibly nut', 'appears positioned', 'unverified due to occlusion and low resolution', 'secure hold unverified' plus explicit '未知／待人工確認' per step. Usable checklist: four unchecked human boxes '- [ ] 人工核對' present (not pre-checked). Provenance/disclaimer: CC BY 4.0 attribution to Motoda et al./AIST 2025 with dataset and original MP4 links, non-endorsement statement, 'concept.done 僅為來源引用，不表示本次實體完成；source frames 不是完成證據' and '本表由 Muse Code 依 JSON 產生，未操作機器人' / execution note 'Software checklist generation only; 未操作機器人; original physical todos remain pending'. All three evidence classes present.\",\n  \"run_id\": \"m1-checklist-loop-1030-r2\",\n  \"todo_id\": \"m1-checklist\",\n  \"verdict\": \"pass\"\n}",
+  "usage_cost_usd": "0.00908"
+}

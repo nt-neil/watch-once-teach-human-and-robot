@@ -1,0 +1,73 @@
+{
+  "source": {
+    "video_sha256": "33e23ee7a91cfde0f862f51675cc8315cb13e529617eda59a1da6e4acc09bf3d",
+    "video_name": "0001_task_video.mp4",
+    "duration_ms": 14000.0,
+    "provider": "meta",
+    "mock": false,
+    "frame_manifest": "frames.json"
+  },
+  "model": "muse-spark-1.2",
+  "reasoning_effort": "low",
+  "max_output_tokens": 4000,
+  "upload_http_status": 200,
+  "response_http_status": 200,
+  "response_status": "completed",
+  "usage": {
+    "input_tokens": 2704,
+    "output_tokens": 2340,
+    "input_tokens_details": {
+      "cached_tokens": 0
+    },
+    "output_tokens_details": {
+      "reasoning_tokens": 1542
+    }
+  },
+  "pricing": {
+    "source": "https://dev.meta.ai/docs/pricing-rate-limits",
+    "currency": "USD",
+    "input_per_million": "1.25",
+    "cached_input_per_million": "0.15",
+    "output_per_million": "4.25",
+    "reasoning_included_in_output": true
+  },
+  "usage_cost_usd": "0.013325",
+  "cost_note": "Usage-based estimate, not a bill reconciliation.",
+  "previous_comparison_cost_reported_by_commander_usd": "0.026018",
+  "known_subtotal_excluding_first_failed_attempt_usd": "0.039343",
+  "attempts": [
+    {
+      "path": "../real-smoke-attempt-1",
+      "cli_exit_code": 2,
+      "result": "Non-completed response rejected; old provider did not persist status details or usage.",
+      "usage_cost_usd": null
+    },
+    {
+      "path": ".",
+      "cli_exit_code": 0,
+      "result": "Completed and validated; manual and pending plan payload exported.",
+      "usage_cost_usd": "0.013325"
+    }
+  ],
+  "paid_inference_attempts_this_task": 2,
+  "mcp_status": "exported_not_sent",
+  "agent_dispatch": false,
+  "audio_acceptance": "Not tested: source has no audio track.",
+  "unit_suite_rerun": false,
+  "new_failure_metadata_check_exit_code": 0,
+  "cli_command": "python3 cli.py ../materials-survey/research/samples/0001_task_video.mp4 --provider meta --model muse-spark-1.2 --confirm-paid-api --workspace-path '<local-path>' --out runs/real-smoke",
+  "first_failed_attempt_budget_reserve_usd": "0.5",
+  "conservative_budget_occupied_usd": "0.539343",
+  "budget_note": "First failed usage is unknown. Reserve is commander-directed, not measured spending.",
+  "semantic_review": [
+    "Structure and references passed; semantic acceptance remains human review.",
+    "possibly nut is uncertain, not confirmed nut.",
+    "grasp verified is not independently proven by sampled frames.",
+    "Final seating/tightening for steps 2 and 4 remains unverified.",
+    "End times are observation-window boundaries, not exact completion evidence."
+  ],
+  "new_failure_metadata_check_command": "python3 -m unittest discover -s tests -p test_failure_metadata.py -v",
+  "root_mcp_receipt": "navide-mcp-receipt.json",
+  "mcp_note": "CLI exported only; commander subsequently created and read back the plan through its own pane MCP.",
+  "manual_attribution_source": "<local-path>"
+}

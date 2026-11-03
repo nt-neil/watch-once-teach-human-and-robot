@@ -1,0 +1,54 @@
+{
+  "run_id": "m1-checklist-loop-1030-r2",
+  "records": [
+    {
+      "log_line": 117,
+      "event_id": "019e8ff1-0d40-7dac-b62f-aea37167ad64",
+      "raw_payload": {
+        "kind": "run_usage",
+        "command_id": "01a18cb3-b378-7ed0-8662-39ec2252437c",
+        "run_stream": {
+          "kind": "run",
+          "id": "01a18cb3-b378-7ed0-8662-39ec2252437c"
+        },
+        "models": [
+          {
+            "model": "muse-spark-1.3",
+            "input_tokens": 92581,
+            "cached_tokens": 59362,
+            "output_tokens": 1984,
+            "reasoning_tokens": 551,
+            "calls": 3
+          }
+        ],
+        "calls": 3,
+        "completed_calls": 3,
+        "failed_calls": 0,
+        "cancelled_calls": 0,
+        "children_included": false,
+        "allowance": null
+      }
+    }
+  ],
+  "latest_models": [
+    {
+      "model": "muse-spark-1.3",
+      "input_tokens": 92581,
+      "cached_tokens": 59362,
+      "output_tokens": 1984,
+      "reasoning_tokens": 551,
+      "calls": 3
+    }
+  ],
+  "observed_usage_cost_usd": "0.05886005",
+  "deduplication": "event id; latest cumulative snapshot per command/run/model, never summed snapshots",
+  "ambiguities": [],
+  "per_call_usage": null,
+  "children_included": [
+    false
+  ],
+  "auxiliary_usage_known": false,
+  "total_cost_usd": null,
+  "coverage": "Native model aggregate only; per-call and auxiliary/judge coverage unverified",
+  "missing_or_ambiguous_usage_is_zero": false
+}

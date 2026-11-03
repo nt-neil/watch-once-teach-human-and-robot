@@ -1,0 +1,75 @@
+{
+  "run_id": "m1-checklist-loop-1030-r2",
+  "recorded_at_utc": "2026-10-30T12:09:40.311188+00:00",
+  "software_plan_rel_path": ".agent-team/plans/meta-6-m1-1_b524e7.html",
+  "todo_id": "m1-checklist",
+  "producer": "actual Muse Code CLI; checklist and execution report were not written by Codex",
+  "prepare_exit_code": 0,
+  "targeted_usage_check_exit_code": 0,
+  "runner_execute_exit_code": 0,
+  "targeted_check_command": "python3 -B -m unittest discover -s tests -p test_m1_loop_r2_usage.py -v",
+  "muse_result": {
+    "run_id": "m1-checklist-loop-1030-r2",
+    "pid": 25859,
+    "started_at_utc": "2026-10-30T12:05:48.197422+00:00",
+    "finished_at_utc": "2026-10-30T12:06:05.620661+00:00",
+    "exit_code": 0,
+    "timed_out": false,
+    "invocations": 1
+  },
+  "muse_models_raw_aggregate": [
+    {
+      "model": "muse-spark-1.3",
+      "input_tokens": 92581,
+      "cached_tokens": 59362,
+      "output_tokens": 1984,
+      "reasoning_tokens": 551,
+      "calls": 3
+    }
+  ],
+  "muse_observed_usage_cost_usd": "0.05886005",
+  "muse_per_call_usage": null,
+  "muse_children_included": [
+    false
+  ],
+  "unreported_auxiliary_usage": null,
+  "independent_spark_model": "muse-spark-1.2",
+  "independent_spark_calls": 1,
+  "spark_raw_usage": {
+    "input_tokens": 3660,
+    "input_tokens_details": {
+      "cached_tokens": 0
+    },
+    "output_tokens": 1060,
+    "output_tokens_details": {
+      "reasoning_tokens": 716
+    },
+    "total_tokens": 4720
+  },
+  "spark_observed_usage_cost_usd": "0.00908",
+  "program_checks_passed": true,
+  "verdict": "pass",
+  "r1_observed_usage_cost_usd": "0.05037995",
+  "r2_observed_usage_cost_usd": "0.06794005",
+  "combined_observed_usage_cost_usd": "0.11832000",
+  "combined_unknown_auxiliary_budget_reserve_usd": "0.10",
+  "combined_projected_occupied_usd": "0.21832000",
+  "combined_r1_r2_budget_usd": "0.50",
+  "total_billed_cost_usd": null,
+  "reserve_is_spending": false,
+  "budget_is_api_hard_limit": false,
+  "source_files_unchanged": 16,
+  "artifact_sha256": {
+    "checklist.md": "e083e3da336212f3fbd11489b9e9c1a3ba74b31cbdccb05e8d40abfa89a9ae38",
+    "execution-report.json": "5825d26fbc24f5a2ac2d427a060931885058b97e2619e0e0201a7c3d72d0f6c2",
+    "program-checks.json": "29fbc01806eb1968da63c67a5e9279d4c06300e36dd8b3192da09cab6270e40c",
+    "verdict.json": "f8b8f4c18a2a197e213cba6c41e05665f74cb09934a770562f95cc6ebe7612d5"
+  },
+  "mcp_calls_by_runner": 0,
+  "plan_status_update_owner": "root pane",
+  "physical_execution": false,
+  "physical_todos_changed": false,
+  "standalone_adapter_live_verified": false,
+  "r1_evidence_preserved": true,
+  "retry_count_r2": 0
+}

@@ -1,0 +1,19 @@
+{
+  "source": {
+    "video_sha256": "33e23ee7a91cfde0f862f51675cc8315cb13e529617eda59a1da6e4acc09bf3d",
+    "video_name": "0001_task_video.mp4",
+    "duration_ms": 14000.0,
+    "provider": "meta",
+    "mock": false,
+    "frame_manifest": "frames.json"
+  },
+  "status": "failed",
+  "error": "Meta request failed; remote error details withheld. No automatic retry.",
+  "provider_metadata": {
+    "provider": "meta",
+    "mock": false,
+    "model": "muse-spark-1.2",
+    "max_output_tokens": 4000,
+    "reasoning_effort": "low"
+  }
+}

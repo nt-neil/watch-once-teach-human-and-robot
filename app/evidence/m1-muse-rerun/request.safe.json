@@ -1,0 +1,8 @@
+{
+  "model": "muse-spark-1.2",
+  "file_id": "file-REDACTED",
+  "max_output_tokens": 4000,
+  "stream": false,
+  "reasoning_effort": "low",
+  "prompt_sha256": "aca8798ac0c5c0da6366176e4379d74bd59ae78c7a42947cf8c93d07570818bd"
+}

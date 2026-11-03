@@ -1,0 +1,46 @@
+$ mcp client → watch-once (stdio)
+tools: list_examples, analyze_video, get_result, export, list_runs, send_to_navide
+
+> call_tool list_examples {}
+[
+ {
+  "id": "m1",
+  "label": "M1 AIST washers (14s, CC BY 4.0)"
+ },
+ {
+  "id": "synthetic",
+  "label": "Test pattern (synthetic, for pipeline check)"
+ }
+]
+
+> call_tool get_result {"run_id":"web-20261103T083626Z"}
+{
+ "run_id": "web-20261103T083626Z",
+ "state": "done",
+ "steps": 2,
+ "manual": "# 操作手冊 [META — 模型輸出，待人工核對]\n\n來源：0001_task_video.mp4\nSHA256：`33e23ee7a91cfde0f862f51675cc8315cb13e529617eda59a1da6e4acc09bf3d`；來源時長：14000.0 ms\n\n這份手冊由同一份操作概念 JSON  …",
+ "manual_truncated": false,
+ "operations": "{\"schema_version\": \"1.0\", \"source\": {\"duration_ms\": 14000.0, \"frame_manifest\": \"frames.json\", \"mock\": false, \"provider\": \"meta\", \"video_name\": \"0001_task_video. …",
+ "operations_truncated": false
+}
+
+> call_tool export {"run_id":"web-20261103T083626Z","format":"vla"}
+{
+ "format": "vla-instruction-sequence/0.1",
+ "episode_id": "web-20261103T083626Z",
+ "source_video_sha256": "33e23ee7a91cfde0f862f51675cc8315cb13e529617eda59a1da6e4acc09bf3d",
+ "steps": [
+  {
+   "id": "subtask-01",
+   "instruction": "place the small round part onto the upper stud of metal block",
+   "start_s": 0.0,
+   "end_s": 7.0
+  },
+  {
+   "id": "subtask-02",
+   "instruction": "place the small round part onto the lower stud of metal block",
+   "start_s": 7.0,
+   "end_s": 14.0
+  }
+ ]
+}

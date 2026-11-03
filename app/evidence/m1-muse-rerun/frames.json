@@ -1,0 +1,146 @@
+{
+  "schema_version": "1.0",
+  "source": {
+    "video_sha256": "33e23ee7a91cfde0f862f51675cc8315cb13e529617eda59a1da6e4acc09bf3d",
+    "video_name": "0001_task_video.mp4",
+    "duration_ms": 14000.0,
+    "provider": "meta",
+    "mock": false,
+    "frame_manifest": "frames.json"
+  },
+  "video_stream_index": 0,
+  "source_duration_ms": 14000.0,
+  "video_duration_ms": 14000.0,
+  "time_base": "1/12800",
+  "timeline_origin_ms": 0.0,
+  "sample_interval_ms": 1000,
+  "has_audio": false,
+  "frames": [
+    {
+      "source_frame": 0,
+      "pts": 0,
+      "pts_time_ms": 0.0,
+      "sample_time_ms": 0.0,
+      "id": "frame-000001",
+      "file": "frames/meta-frame-000001.jpg",
+      "image_sha256": "ed9203613eefc64021d14de2b7886df1c85f9d07b8dde3aeffebd1d81dbbd1fa"
+    },
+    {
+      "source_frame": 50,
+      "pts": 12800,
+      "pts_time_ms": 1000.0,
+      "sample_time_ms": 1000.0,
+      "id": "frame-000002",
+      "file": "frames/meta-frame-000002.jpg",
+      "image_sha256": "67842d167f3712ec3c4c3c599c1ab77d6845142cc61fa40a1cc8d20da6936a3e"
+    },
+    {
+      "source_frame": 100,
+      "pts": 25600,
+      "pts_time_ms": 2000.0,
+      "sample_time_ms": 2000.0,
+      "id": "frame-000003",
+      "file": "frames/meta-frame-000003.jpg",
+      "image_sha256": "459dc934372b79244e8beee5700e28d164055041a33b1393a1f75f14734dcf95"
+    },
+    {
+      "source_frame": 150,
+      "pts": 38400,
+      "pts_time_ms": 3000.0,
+      "sample_time_ms": 3000.0,
+      "id": "frame-000004",
+      "file": "frames/meta-frame-000004.jpg",
+      "image_sha256": "a3127ccd83f19d7f35dee27a2fa4bcd7138c939f932d650de89381340582602d"
+    },
+    {
+      "source_frame": 200,
+      "pts": 51200,
+      "pts_time_ms": 4000.0,
+      "sample_time_ms": 4000.0,
+      "id": "frame-000005",
+      "file": "frames/meta-frame-000005.jpg",
+      "image_sha256": "85260ed0a1a5fac991f56b4fbce24af92a51af408356b100557bf8df0ca51f4b"
+    },
+    {
+      "source_frame": 250,
+      "pts": 64000,
+      "pts_time_ms": 5000.0,
+      "sample_time_ms": 5000.0,
+      "id": "frame-000006",
+      "file": "frames/meta-frame-000006.jpg",
+      "image_sha256": "3bad6f4f6bd0a4bdbbf736a3d42a4369d8d83d44ba185b26bd5363548b3feea3"
+    },
+    {
+      "source_frame": 300,
+      "pts": 76800,
+      "pts_time_ms": 6000.0,
+      "sample_time_ms": 6000.0,
+      "id": "frame-000007",
+      "file": "frames/meta-frame-000007.jpg",
+      "image_sha256": "ff4f686b560e973347bcf858c92e8d15577f99f8cd1083bc93a09c169c1709f1"
+    },
+    {
+      "source_frame": 350,
+      "pts": 89600,
+      "pts_time_ms": 7000.0,
+      "sample_time_ms": 7000.0,
+      "id": "frame-000008",
+      "file": "frames/meta-frame-000008.jpg",
+      "image_sha256": "fb1b0c981ee90a5f312484b95a098aec018a74fc4f1add3d7e7deb67372108b3"
+    },
+    {
+      "source_frame": 400,
+      "pts": 102400,
+      "pts_time_ms": 8000.0,
+      "sample_time_ms": 8000.0,
+      "id": "frame-000009",
+      "file": "frames/meta-frame-000009.jpg",
+      "image_sha256": "ced74d64416b66eac6e76a3a99c86efad431381f63169e153790f23f04661370"
+    },
+    {
+      "source_frame": 450,
+      "pts": 115200,
+      "pts_time_ms": 9000.0,
+      "sample_time_ms": 9000.0,
+      "id": "frame-000010",
+      "file": "frames/meta-frame-000010.jpg",
+      "image_sha256": "0640e1ecb8dbeb7e630687e5182801dd6773ddf02db96a35f12c3b8da7bc98de"
+    },
+    {
+      "source_frame": 500,
+      "pts": 128000,
+      "pts_time_ms": 10000.0,
+      "sample_time_ms": 10000.0,
+      "id": "frame-000011",
+      "file": "frames/meta-frame-000011.jpg",
+      "image_sha256": "843645c3af4538b9d04ec3921d05df7c936027259ba1a893ed00753a8caa5f29"
+    },
+    {
+      "source_frame": 550,
+      "pts": 140800,
+      "pts_time_ms": 11000.0,
+      "sample_time_ms": 11000.0,
+      "id": "frame-000012",
+      "file": "frames/meta-frame-000012.jpg",
+      "image_sha256": "fe9a21792a5ad422d4b8722c5efa3c763b4c7e59c7b48e32cdd0ee2f2974867e"
+    },
+    {
+      "source_frame": 600,
+      "pts": 153600,
+      "pts_time_ms": 12000.0,
+      "sample_time_ms": 12000.0,
+      "id": "frame-000013",
+      "file": "frames/meta-frame-000013.jpg",
+      "image_sha256": "e0fe1322ed5ec0ec7a001af087e9611adb05847aec62b1775b628281eaeaa691"
+    },
+    {
+      "source_frame": 650,
+      "pts": 166400,
+      "pts_time_ms": 13000.0,
+      "sample_time_ms": 13000.0,
+      "id": "frame-000014",
+      "file": "frames/meta-frame-000014.jpg",
+      "image_sha256": "fbce267865b3186e2d87a9794f6b3d43979c5bafe2cea4fc6d07936a7cea5acc"
+    }
+  ]
+}

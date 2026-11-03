@@ -1,0 +1,16 @@
+{
+  "id": "resp-REDACTED",
+  "status": "completed",
+  "model": "muse-spark-1.2",
+  "usage": {
+    "input_tokens": 2704,
+    "input_tokens_details": {
+      "cached_tokens": 0
+    },
+    "output_tokens": 2005,
+    "output_tokens_details": {
+      "reasoning_tokens": 1574
+    },
+    "total_tokens": 4709
+  }
+}

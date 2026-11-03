@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "watch-once": {
+      "command": "<repo>/app/.venv/bin/python",
+      "args": ["<repo>/app/mcp_server.py"],
+      "env": {}
+    }
+  }
+}

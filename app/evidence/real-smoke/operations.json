@@ -1,0 +1,83 @@
+{
+  "schema_version": "1.0",
+  "source": {
+    "duration_ms": 14000.0,
+    "frame_manifest": "frames.json",
+    "mock": false,
+    "provider": "meta",
+    "video_name": "0001_task_video.mp4",
+    "video_sha256": "33e23ee7a91cfde0f862f51675cc8315cb13e529617eda59a1da6e4acc09bf3d"
+  },
+  "steps": [
+    {
+      "concept": {
+        "action": "approaches and picks",
+        "done": "gripper grasped small round part and lifted from surface - seating/ grasp verified by part no longer on surface, secure hold unverified",
+        "object": "right robotic gripper",
+        "pre": "two small round parts resting on teal surface to right of metal plate with two studs, gripper open and away",
+        "target": "upper small round part (type uncertain, possibly nut)"
+      },
+      "end_ms": 3500,
+      "id": "step-01",
+      "source_frame_refs": [
+        "frame-000001",
+        "frame-000002",
+        "frame-000003",
+        "frame-000004"
+      ],
+      "start_ms": 0
+    },
+    {
+      "concept": {
+        "action": "transports and positions onto",
+        "done": "small round part appears positioned over/on upper stud of metal plate, final seating/tightening unverified due to occlusion and low resolution",
+        "object": "right robotic gripper holding small round part (type uncertain)",
+        "pre": "gripper holding small round part above surface, upper stud of metal plate exposed",
+        "target": "upper stud on rectangular metal plate"
+      },
+      "end_ms": 7000,
+      "id": "step-02",
+      "source_frame_refs": [
+        "frame-000005",
+        "frame-000006",
+        "frame-000007"
+      ],
+      "start_ms": 3500
+    },
+    {
+      "concept": {
+        "action": "repositions and picks",
+        "done": "gripper grasped second small round part and lifted from surface, secure hold unverified",
+        "object": "right robotic gripper",
+        "pre": "one small round part remaining on teal surface to right of plate, one part possibly on upper stud (uncertain), gripper moved away from plate",
+        "target": "remaining small round part (type uncertain, possibly nut) on surface"
+      },
+      "end_ms": 10500,
+      "id": "step-03",
+      "source_frame_refs": [
+        "frame-000008",
+        "frame-000009",
+        "frame-000010",
+        "frame-000011"
+      ],
+      "start_ms": 7000
+    },
+    {
+      "concept": {
+        "action": "transports and positions onto",
+        "done": "small round part appears positioned over/on lower stud of metal plate, final seating/tightening unverified due to occlusion and low resolution",
+        "object": "right robotic gripper holding small round part (type uncertain)",
+        "pre": "gripper holding second small round part above surface, lower stud of metal plate exposed",
+        "target": "lower stud on rectangular metal plate"
+      },
+      "end_ms": 14000,
+      "id": "step-04",
+      "source_frame_refs": [
+        "frame-000012",
+        "frame-000013",
+        "frame-000014"
+      ],
+      "start_ms": 10500
+    }
+  ]
+}

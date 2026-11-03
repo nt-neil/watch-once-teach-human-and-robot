@@ -1,0 +1,103 @@
+{
+ "format": "lerobot-v3-episode-annotation/0.1",
+ "annotation_only": true,
+ "robot_state_action_data": null,
+ "episode": {
+  "episode_id": "real-smoke",
+  "task": "Reproduce the 4 demonstrated assembly steps",
+  "task_id": 0,
+  "source_video_sha256": "33e23ee7a91cfde0f862f51675cc8315cb13e529617eda59a1da6e4acc09bf3d",
+  "source_video_name": "0001_task_video.mp4",
+  "duration_s": 14.0,
+  "subtasks": [
+   {
+    "subtask_id": "subtask-01",
+    "step_id": "step-01",
+    "instruction": "pick up the upper small round part",
+    "instruction_origin": "rule_based_template_v2",
+    "action_primitive": "pick",
+    "primitive_origin": "keyword_rules_v2",
+    "object": "right robotic gripper",
+    "action": "approaches and picks",
+    "target": "upper small round part (type uncertain, possibly nut)",
+    "pre": "two small round parts resting on teal surface to right of metal plate with two studs, gripper open and away",
+    "done": "gripper grasped small round part and lifted from surface - seating/ grasp verified by part no longer on surface, secure hold unverified",
+    "start_s": 0.0,
+    "end_s": 3.5,
+    "source_frames": [
+     "frame-000001",
+     "frame-000002",
+     "frame-000003",
+     "frame-000004"
+    ]
+   },
+   {
+    "subtask_id": "subtask-02",
+    "step_id": "step-02",
+    "instruction": "insert the small round part into the upper stud on rectangular metal plate",
+    "instruction_origin": "rule_based_template_v2",
+    "action_primitive": "insert",
+    "primitive_origin": "keyword_rules_v2",
+    "object": "right robotic gripper holding small round part (type uncertain)",
+    "action": "transports and positions onto",
+    "target": "upper stud on rectangular metal plate",
+    "pre": "gripper holding small round part above surface, upper stud of metal plate exposed",
+    "done": "small round part appears positioned over/on upper stud of metal plate, final seating/tightening unverified due to occlusion and low resolution",
+    "start_s": 3.5,
+    "end_s": 7.0,
+    "source_frames": [
+     "frame-000005",
+     "frame-000006",
+     "frame-000007"
+    ]
+   },
+   {
+    "subtask_id": "subtask-03",
+    "step_id": "step-03",
+    "instruction": "pick up the remaining small round part",
+    "instruction_origin": "rule_based_template_v2",
+    "action_primitive": "pick",
+    "primitive_origin": "keyword_rules_v2",
+    "object": "right robotic gripper",
+    "action": "repositions and picks",
+    "target": "remaining small round part (type uncertain, possibly nut) on surface",
+    "pre": "one small round part remaining on teal surface to right of plate, one part possibly on upper stud (uncertain), gripper moved away from plate",
+    "done": "gripper grasped second small round part and lifted from surface, secure hold unverified",
+    "start_s": 7.0,
+    "end_s": 10.5,
+    "source_frames": [
+     "frame-000008",
+     "frame-000009",
+     "frame-000010",
+     "frame-000011"
+    ]
+   },
+   {
+    "subtask_id": "subtask-04",
+    "step_id": "step-04",
+    "instruction": "insert the small round part into the lower stud on rectangular metal plate",
+    "instruction_origin": "rule_based_template_v2",
+    "action_primitive": "insert",
+    "primitive_origin": "keyword_rules_v2",
+    "object": "right robotic gripper holding small round part (type uncertain)",
+    "action": "transports and positions onto",
+    "target": "lower stud on rectangular metal plate",
+    "pre": "gripper holding second small round part above surface, lower stud of metal plate exposed",
+    "done": "small round part appears positioned over/on lower stud of metal plate, final seating/tightening unverified due to occlusion and low resolution",
+    "start_s": 10.5,
+    "end_s": 14.0,
+    "source_frames": [
+     "frame-000012",
+     "frame-000013",
+     "frame-000014"
+    ]
+   }
+  ]
+ },
+ "not_included": [
+  "data/*.parquet robot states and actions",
+  "videos/*.mp4 shards",
+  "meta/stats.json normalization"
+ ],
+ "reference": "https://huggingface.co/docs/lerobot/lerobot-dataset-v3"
+}

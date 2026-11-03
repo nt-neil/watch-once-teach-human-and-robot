@@ -1,0 +1,64 @@
+{
+ "format": "bt-pddl-plan-steps/0.1",
+ "episode_id": "real-smoke",
+ "source_video_sha256": "33e23ee7a91cfde0f862f51675cc8315cb13e529617eda59a1da6e4acc09bf3d",
+ "note": "Preconditions/effects are the demonstrated five-field strings; executor must ground them.",
+ "steps": [
+  {
+   "id": "subtask-01",
+   "action": "pick",
+   "instruction": "pick up the upper small round part",
+   "target": "upper small round part (type uncertain, possibly nut)",
+   "preconditions": [
+    "two small round parts resting on teal surface to right of metal plate with two studs, gripper open and away"
+   ],
+   "effects": [
+    "gripper grasped small round part and lifted from surface - seating/ grasp verified by part no longer on surface, secure hold unverified"
+   ],
+   "start_s": 0.0,
+   "end_s": 3.5
+  },
+  {
+   "id": "subtask-02",
+   "action": "insert",
+   "instruction": "insert the small round part into the upper stud on rectangular metal plate",
+   "target": "upper stud on rectangular metal plate",
+   "preconditions": [
+    "gripper holding small round part above surface, upper stud of metal plate exposed"
+   ],
+   "effects": [
+    "small round part appears positioned over/on upper stud of metal plate, final seating/tightening unverified due to occlusion and low resolution"
+   ],
+   "start_s": 3.5,
+   "end_s": 7.0
+  },
+  {
+   "id": "subtask-03",
+   "action": "pick",
+   "instruction": "pick up the remaining small round part",
+   "target": "remaining small round part (type uncertain, possibly nut) on surface",
+   "preconditions": [
+    "one small round part remaining on teal surface to right of plate, one part possibly on upper stud (uncertain), gripper moved away from plate"
+   ],
+   "effects": [
+    "gripper grasped second small round part and lifted from surface, secure hold unverified"
+   ],
+   "start_s": 7.0,
+   "end_s": 10.5
+  },
+  {
+   "id": "subtask-04",
+   "action": "insert",
+   "instruction": "insert the small round part into the lower stud on rectangular metal plate",
+   "target": "lower stud on rectangular metal plate",
+   "preconditions": [
+    "gripper holding second small round part above surface, lower stud of metal plate exposed"
+   ],
+   "effects": [
+    "small round part appears positioned over/on lower stud of metal plate, final seating/tightening unverified due to occlusion and low resolution"
+   ],
+   "start_s": 10.5,
+   "end_s": 14.0
+  }
+ ]
+}

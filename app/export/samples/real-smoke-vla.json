@@ -1,0 +1,31 @@
+{
+ "format": "vla-instruction-sequence/0.1",
+ "episode_id": "real-smoke",
+ "source_video_sha256": "33e23ee7a91cfde0f862f51675cc8315cb13e529617eda59a1da6e4acc09bf3d",
+ "steps": [
+  {
+   "id": "subtask-01",
+   "instruction": "pick up the upper small round part",
+   "start_s": 0.0,
+   "end_s": 3.5
+  },
+  {
+   "id": "subtask-02",
+   "instruction": "insert the small round part into the upper stud on rectangular metal plate",
+   "start_s": 3.5,
+   "end_s": 7.0
+  },
+  {
+   "id": "subtask-03",
+   "instruction": "pick up the remaining small round part",
+   "start_s": 7.0,
+   "end_s": 10.5
+  },
+  {
+   "id": "subtask-04",
+   "instruction": "insert the small round part into the lower stud on rectangular metal plate",
+   "start_s": 10.5,
+   "end_s": 14.0
+  }
+ ]
+}

@@ -8,3 +8,6 @@ runs/
 server-state.json
 *.log
 .DS_Store
+*.pid
+server.pid
+e2e-result.json
