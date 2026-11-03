@@ -21,7 +21,7 @@ Navide 本體、Muse CLI／Muse Code、Meta 模型與服務（包括 Muse Spark�
 
 本次 `real-smoke` 使用原始 14 秒 MP4，完整上傳，沒有截取時段、重編碼原影片或變速。手冊圖片實際做了抽幀、縮放至最寬 640 px、另存 JPEG；這些圖片不是作者提供的獨立完成證據。素材清單另有準備好的 `local_clip` 與其「僅轉碼」說明，不能套用為本次 `local_original` 輸入的處理紀錄。
 
-署名與處理差異可追溯至素材清單（未公開）的 `selected[id=M1]` 及[真手冊來源段](evidence/real-smoke/manual.md)。README 保留完整作者／授權資訊；模型輸出內容及既有 run 不因這次文件補充而改動。
+署名與處理差異可追溯至 [selected-app-sources.json](../materials-survey/continuation/selected-app-sources.json) 的 `selected[id=M1]` 及[真手冊來源段](runs/real-smoke/manual.md)。README 保留完整作者／授權資訊；模型輸出內容及既有 run 不因這次文件補充而改動。
 
 ## 安裝
 
@@ -168,13 +168,13 @@ python3 cli.py runs/synthetic-fixture.mp4 \
 
 M1 是 **4 個操作、2 次裝配**，不是 4 次裝配；目前這段驗收僅 **n=1**，不能泛化到其他物件或工序。接觸時夾爪遮擋、零件類型及穩固夾持仍有未知；原片無音軌，不能據此驗證音訊／旁白理解。
 
-後續 root 已回報以自己的 pane MCP 建立並回讀 mock 與 real 計畫；各 run 的 `navide-mcp-receipt.json` 記錄此事。M1 real 計畫為 draft、4 pending、全部 owner=user，沒有 agent 執行。CLI 原始 `submission.json` 仍維持 exported_not_sent，standalone adapter 仍未真連線驗證。完整費用、產物、人工驗收界線與 Muse 指揮交接見內部 HANDOFF（未公開）。
+後續 root 已回報以自己的 pane MCP 建立並回讀 mock 與 real 計畫；各 run 的 `navide-mcp-receipt.json` 記錄此事。M1 real 計畫為 draft、4 pending、全部 owner=user，沒有 agent 執行。CLI 原始 `submission.json` 仍維持 exported_not_sent，standalone adapter 仍未真連線驗證。完整費用、產物、人工驗收界線與 Muse 指揮交接見 [HANDOFF.md](HANDOFF.md)。
 
 上述費用是 M1／模型比較的歷史快照，包含首輪未知費用的 US$0.5 預留，不是專案當前總帳單；最新彙總見下方文件收尾紀錄。
 
 ## W1 唯一重試結果與後續界線
 
-W1 唯一一次粒度重試已結束：原輪 **0/4 → 重試 1/4，仍未通過**。唯一配對的開始／結束誤差為 **2.5／0.5 秒**；GT 本身約 **±2 秒**，穩健 ≤3 秒仍為 **0/4**，不能稱為精密時間驗收通過。回覆縮成 4 列不等於四步都辨識成功。保留原 GT，不再重試。連續細動作中的板件身份辨識與結構追蹤列為已知限制；Demo 主打 M1，但 M1 通過仍僅 **n=1**，不代表通用能力。素材 **9 支全數核驗**也不等於 9 支都經模型驗收通過。來源：W1 粒度重試報告（未公開；結論：0/4 → 重試 1/4，仍未通過，連續細動作列為已知限制）。
+W1 唯一一次粒度重試已結束：原輪 **0/4 → 重試 1/4，仍未通過**。唯一配對的開始／結束誤差為 **2.5／0.5 秒**；GT 本身約 **±2 秒**，穩健 ≤3 秒仍為 **0/4**，不能稱為精密時間驗收通過。回覆縮成 4 列不等於四步都辨識成功。保留原 GT，不再重試。連續細動作中的板件身份辨識與結構追蹤列為已知限制；Demo 主打 M1，但 M1 通過仍僅 **n=1**，不代表通用能力。素材 **9 支全數核驗**也不等於 9 支都經模型驗收通過。來源：[W1 粒度重試報告](runs/w1-granularity-1030/report.md)。
 
 本次 W1 重試新增 usage 推算費用 **US$0.020043**。依指揮最新彙總，已知費用 **US$0.08082825**，加舊失敗未知費用預留 **US$0.50**，保守額度占用 **US$0.58082825**；這不是帳單核對，未知費用與預留不得當成實際支出。
 
@@ -198,7 +198,7 @@ python3 server.py --port 18766
 # open http://127.0.0.1:18766/ in a browser
 ```
 
-功能：固定 Meta Muse Spark（無 provider 選單）。拖放／點選上傳 MP4 → 可填一句 task-hint（命名輔助，不代看影片）→ 勾白話付費確認 → Analyze（server 端強制每日上限，見 Settings）→ 左右雙欄（手冊＋截圖／操作 JSON，每步附 evidence 可見證據句）→ 匯出（LeRobot 標註／VLA 序列／規劃步驟，見 `export/README.md`，僅標註層）→ Navide payload 預覽（未實連照實標示）→ 歷史 run 瀏覽（只列真推論）。無金鑰時 Analyze 換成 Settings 引導；首頁 hero 有 M1 真推論 before／after 靜態對照（純說明圖，無連結）。等分步驟（各段差 5% 內）標 needs-review 警告，不擋 run。驗收：tests 83/83（＋1 環境 skip）、sha256 846/846（7 檔預期變動已更新基準）；live e2e 待錄製機重跑；畫面經多輪截圖自評＋真瀏覽器實機操作驗收。
+功能：固定 Meta Muse Spark（無 provider 選單）。拖放／點選上傳影片（MP4／MOV／M4V／WebM／MKV／AVI，上限 100 MB；非 MP4 由本機 ffmpeg 轉 H.264＋AAC，不變速不裁切，provenance 記入 transcode.json）→ 可填一句 task-hint（命名輔助，不代看影片）→ 勾白話付費確認 → Analyze（server 端強制每日上限，見 Settings）→ 左右雙欄（手冊＋截圖／操作 JSON，每步附 evidence 可見證據句）→ 匯出（LeRobot 標註／VLA 序列／規劃步驟，見 `export/README.md`，僅標註層）→ Navide payload 預覽（未實連照實標示）→ 歷史 run 瀏覽（只列真推論）。無金鑰時 Analyze 換成 Settings 引導；首頁 hero 有 M1 v2 真推論 before／after 靜態對照（純說明圖，無連結）。等分步驟（各段差 5% 內）標 needs-review 警告，不擋 run。失敗一律白話（401／逾時／斷線／壞檔皆有對應文案，不卡進度頁）。驗收：tests 91/91（＋1 環境 skip）、sha256 846/846（7 檔預期變動已更新基準）；live e2e 19/19；畫面經 13 輪截圖自評＋真瀏覽器實機操作驗收。
 
 進度頁（/job/）顯示 7 段白話進度（每段附真實資料：檔名／長度／解析度／SHA、抽幀時刻、驗證細項、費用）＋畫格 filmstrip＋Activity log。reduced-motion 下無動畫。
 

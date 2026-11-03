@@ -182,15 +182,32 @@ class WebRegressionTests(unittest.TestCase):
             self.assertFalse(WEB.mock_fixture_matches(other))
 
     def test_mock_wrong_video_rejected_no_job(self):
+        with tempfile.TemporaryDirectory() as td:
+            real = self._make_clip(td, "other.mp4")
+            with WEB.jobs_lock:
+                before = set(WEB.jobs)
+            head, data, started = self._post_analyze(
+                [("provider", "mock")],
+                file_content=real.read_bytes(), filename="other.mp4")
+            with WEB.jobs_lock:
+                after = set(WEB.jobs)
+        self.assertIn("400", head.splitlines()[0])
+        self.assertIn("Fixture does not match", data.decode())
+        self.assertEqual(started, [])
+        self.assertEqual(before, after)
+
+    def test_garbage_upload_rejected_plainly_before_guard(self):
+        # A 7-byte garbage .mov must say "cannot be read", not fixture mismatch.
         with WEB.jobs_lock:
             before = set(WEB.jobs)
         head, data, started = self._post_analyze(
             [("provider", "mock")],
-            file_content=b"definitely not the fixture", filename="other.mp4")
+            file_content=b"garbage", filename="bad.mov")
         with WEB.jobs_lock:
             after = set(WEB.jobs)
         self.assertIn("400", head.splitlines()[0])
-        self.assertIn("Fixture does not match", data.decode())
+        self.assertIn("Cannot read this file", data.decode())
+        self.assertNotIn("Fixture does not match", data.decode())
         self.assertEqual(started, [])
         self.assertEqual(before, after)
 
@@ -253,7 +270,8 @@ class WebRegressionTests(unittest.TestCase):
         self.assertIn("may split into 2 or 4 steps", html)
         self.assertNotIn("any video", html.lower())
         self.assertIn('id="drop"', html)
-        self.assertIn("Drop an MP4 here or click to choose", html)
+        self.assertIn("Drop a video here or click to choose", html)
+        self.assertIn("MP4 / MOV / M4V / WebM / MKV / AVI", html)
         self.assertIn('<label class="drop"', html)
         self.assertIn("Choose file", html)
         self.assertIn('class="vh"', html)
@@ -438,6 +456,123 @@ class WebRegressionTests(unittest.TestCase):
                                        capture_output=True, text=True, timeout=30)
                     self.assertEqual(r.returncode, 0,
                                      f"{name} script {i}: {r.stderr[:300]}")
+
+    def _make_clip(self, td, name):
+        import shutil
+        import subprocess
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("ffmpeg not present")
+        p = Path(td) / name
+        r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi",
+                            "-i", "testsrc=duration=1:size=160x120:rate=10",
+                            "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
+                            "-shortest", str(p)],
+                           capture_output=True, text=True, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr[:200])
+        return p
+
+    def test_prepare_upload_converts_mov_and_webm(self):
+        import shutil
+        import subprocess
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("ffmpeg not present")
+
+        def probe(path):
+            r = subprocess.run(["ffprobe", "-v", "error",
+                                "-show_entries", "stream=codec_name",
+                                "-show_entries", "format=duration",
+                                "-of", "default=noprint_wrappers=1", str(path)],
+                               capture_output=True, text=True, timeout=60)
+            self.assertEqual(r.returncode, 0)
+            codecs, dur = [], 0.0
+            for line in r.stdout.splitlines():
+                if line.startswith("codec_name="):
+                    codecs.append(line.split("=", 1)[1])
+                elif line.startswith("duration="):
+                    dur = float(line.split("=", 1)[1])
+            return codecs, dur
+
+        with tempfile.TemporaryDirectory() as td:
+            for name in ("clip.mov", "clip.webm", "clip.mkv"):
+                src = self._make_clip(td, name)
+                _, dur_before = probe(src)
+                out, prov = WEB.prepare_upload(src)
+                self.assertTrue(out.is_file())
+                self.assertEqual(out.suffix, ".mp4")
+                self.assertEqual(set(prov), {"original_name", "original_sha256",
+                                             "transcoded_sha256", "note"})
+                self.assertEqual(prov["original_name"], name)
+                self.assertEqual(len(prov["original_sha256"]), 64)
+                self.assertEqual(len(prov["transcoded_sha256"]), 64)
+                self.assertIn("transcoded for upload", prov["note"])
+                codecs, dur_after = probe(out)
+                self.assertIn("h264", codecs)
+                self.assertIn("aac", codecs)
+                self.assertLess(abs(dur_after - dur_before), 0.5)
+
+    def test_transcoded_clip_runs_mock_pipeline(self):
+        import json
+        import shutil
+        import subprocess
+        import sys
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("ffmpeg not present")
+        with tempfile.TemporaryDirectory(dir=str(WEB.APP_DIR)) as td:
+            src = self._make_clip(td, "clip.mov")
+            mp4, _ = WEB.prepare_upload(src)
+            fixture = {"steps": [{"id": "t1", "start_ms": 0, "end_ms": 500,
+                                   "concept": {"object": "o", "action": "a",
+                                             "target": "t", "pre": "p", "done": "d"},
+                                   "source_frame_refs": ["frame-000001"],
+                                   "evidence": "test clip frame"}]}
+            fp = Path(td) / "resp.json"
+            fp.write_text(json.dumps(fixture))
+            out = Path(td) / "w13run"
+            r = subprocess.run(
+                [sys.executable, "-B", "cli.py", str(mp4),
+                 "--workspace-path", str(WEB.APP_DIR),
+                 "--provider", "mock", "--mock-response", str(fp),
+                 "--out", str(out.relative_to(WEB.APP_DIR))],
+                cwd=str(WEB.APP_DIR), capture_output=True, text=True, timeout=120)
+            self.assertEqual(r.returncode, 0, r.stderr[-300:])
+            self.assertTrue((out / "operations.json").is_file())
+            self.assertTrue((out / "manual.md").is_file())
+
+    def test_prepare_upload_rejects_bad_file_plainly(self):
+        with tempfile.TemporaryDirectory() as td:
+            bad = Path(td) / "bad.mp4"
+            bad.write_bytes(b"not a video at all")
+            with self.assertRaises(Exception) as cm:
+                WEB.prepare_upload(bad)
+            self.assertIn("cannot be read", str(cm.exception))
+
+    def test_post_mov_passes_extension_check(self):
+        # A non-fixture .mov reaches the mock guard (not the extension gate),
+        # proving .mov uploads are accepted at the door.
+        with tempfile.TemporaryDirectory() as td:
+            src = self._make_clip(td, "clip.mov")
+            head, data, started = self._post_analyze(
+                [("provider", "mock")],
+                file_content=src.read_bytes(), filename="clip.mov")
+        self.assertIn("400", head.splitlines()[0])
+        self.assertIn("Fixture does not match", data.decode())
+        self.assertEqual(started, [])
+
+    def test_post_exe_rejected(self):
+        head, data, started = self._post_analyze(
+            [("provider", "mock")],
+            file_content=b"MZ fake", filename="run.exe")
+        self.assertIn("400", head.splitlines()[0])
+        self.assertIn("Only video files", data.decode())
+        self.assertEqual(started, [])
+
+    def test_plain_cli_error_mapping(self):
+        self.assertIn("check the key", WEB.plain_cli_error("ERROR: Meta upload HTTP 401; no response request made."))
+        self.assertIn("429", WEB.plain_cli_error("Meta responses HTTP 429; no task exported."))
+        self.assertIn("timeout", WEB.plain_cli_error("Meta request timed out; billing unknown.").lower())
+        self.assertIn("network", WEB.plain_cli_error("Meta request failed; remote withheld.").lower())
+        self.assertEqual(WEB.plain_cli_error("Source exceeds 60 seconds; input rejected."),
+                         "Source exceeds 60 seconds; input rejected.")
 
     def test_failed_job_renders_error_state(self):
         with WEB.jobs_lock:

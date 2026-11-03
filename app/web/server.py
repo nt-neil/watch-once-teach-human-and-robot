@@ -56,6 +56,8 @@ UPLOAD_DIR = RUNS_DIR / "web-uploads"
 BUDGET_FILE = RUNS_DIR / "web-ui-budget.json"
 EVIDENCE_DIR = APP_DIR / "evidence"
 MAX_UPLOAD = 100 * 1024 * 1024
+ALLOWED_EXTS = (".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi")
+EXT_LABEL = "MP4 / MOV / M4V / WebM / MKV / AVI"
 DEFAULT_MAX_CALLS = 20
 DEFAULT_MAX_USD = 1.00
 DEFAULT_MODEL = "muse-spark-1.2"
@@ -395,6 +397,85 @@ def scrub_video_name(raw):
     return re.sub(r"[\\/]", "_", Path(raw or "video").name)[:80]
 
 
+UNREADABLE_MSG = "This file cannot be read. It may be damaged, or not a real video."
+
+
+class UploadError(ValueError):
+    """Plain-language upload failure shown on the error page."""
+
+
+def _sha256_file(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _ffprobe_ok(path):
+    try:
+        r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0",
+                            "-show_entries", "stream=codec_type", "-of", "csv=p=0",
+                            str(path)], capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return r.returncode == 0 and "video" in (r.stdout or "")
+
+
+def prepare_upload(src):
+    """Return (mp4_path, provenance). Non-MP4 is transcoded with local ffmpeg.
+
+    Raises UploadError with a plain-language message when the file is not a
+    readable video.
+    """
+    src = Path(src)
+    ext = src.suffix.lower()
+    if ext not in ALLOWED_EXTS:
+        raise UploadError(f"Only video files are accepted ({EXT_LABEL}).")
+    if ext == ".mp4":
+        if not _ffprobe_ok(src):
+            raise UploadError(UNREADABLE_MSG)
+        digest = _sha256_file(src)
+        return src, {"original_name": src.name, "original_sha256": digest,
+                     "transcoded_sha256": digest, "note": "original mp4, no transcode"}
+    dst = src.with_name(src.stem + "-upload.mp4")
+    try:
+        r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(src),
+                            "-c:v", "libx264", "-preset", "veryfast",
+                            "-c:a", "aac", "-movflags", "+faststart", str(dst)],
+                           capture_output=True, text=True, timeout=300)
+    except (OSError, subprocess.TimeoutExpired):
+        raise UploadError(UNREADABLE_MSG)
+    if r.returncode != 0 or not dst.is_file() or not _ffprobe_ok(dst):
+        try:
+            dst.unlink()
+        except OSError:
+            pass
+        raise UploadError(UNREADABLE_MSG)
+    prov = {"original_name": src.name, "original_sha256": _sha256_file(src),
+            "transcoded_sha256": _sha256_file(dst), "note": "transcoded for upload"}
+    try:
+        src.unlink()
+    except OSError:
+        pass
+    return dst, prov
+
+
+def plain_cli_error(raw):
+    """Map technical CLI failures to plain language for the progress page."""
+    t = raw or ""
+    if "HTTP 401" in t:
+        return "Meta rejected the API key (HTTP 401). Open Settings and check the key."
+    if "HTTP 402" in t or "HTTP 429" in t:
+        return "Meta refused the request (%s). Check billing/quota and try again later." % (
+            "402" if "402" in t else "429")
+    if "timed out" in t:
+        return "Meta took too long to answer (timeout). Nothing was retried; try again later."
+    if "Meta request failed" in t:
+        return "Could not reach Meta (network error). Check your connection and try again."
+    return t
+
+
 def mock_fixture_matches(video_path):
     """Mock wraps a hand-written fixture for the synthetic clip only.
 
@@ -690,6 +771,9 @@ th{background:#edefec;color:#1a2420}
 .donesteps{display:flex;flex-direction:column;gap:8px;margin:8px 0}
 .dstep{background:#f4faf7;border:1px solid #0b5c4c;border-radius:8px;padding:8px 12px;font-size:14px;animation:flyin .35s ease-out backwards}
 a.btnlink{display:inline-block;font-size:15px;font-weight:700;padding:10px 22px;background:#0b5c4c;color:#fff!important;border-radius:6px;text-decoration:none;margin-top:6px}
+a.cta{display:inline-block;font-size:15px;font-weight:700;padding:10px 22px;background:#0b5c4c;color:#fff!important;border-radius:6px;text-decoration:none}
+.errlinks a{display:inline-block;font-size:14px;font-weight:700;padding:8px 18px;border-radius:6px;text-decoration:none;margin-right:8px;background:#0b5c4c;color:#fff!important}
+.errlinks a:last-child{background:#fff;color:#0b5c4c!important;border:2px solid #0b5c4c}
 .elapsedline{font-size:14px;color:#3d4a44}
 
 .errlinks{margin:10px 0;font-size:15px}
@@ -741,9 +825,9 @@ HOME_TMPL = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 <p class="fitnote">Best for: one person or machine doing one thing, 10–60s, steady camera, clear actions.</p>
 <p class="limitnote">Limits: step splitting is unstable — the same clip may split into 2 or 4 steps. Always review results by hand.</p>
 <label class="drop" id="drop" for="filein">
-<input type="file" name="video" id="filein" class="vh" accept=".mp4,video/mp4">
+<input type="file" name="video" id="filein" class="vh" accept=".mp4,.mov,.m4v,.webm,.mkv,.avi,video/mp4,video/quicktime,video/webm">
 <span class="dropicon" aria-hidden="true">⇪</span>
-<span class="dropmsg">Drop an MP4 here or click to choose · max 100 MB · stays on this machine</span>
+<span class="dropmsg">Drop a video here or click to choose · MP4 / MOV / M4V / WebM / MKV / AVI · max 100 MB · stays on this machine</span>
 <span class="filebtnlike">Choose file</span>
 </label>
 <p class="filename" id="fname" hidden></p>
@@ -848,7 +932,8 @@ function tick(){{document.getElementById("elapsed").textContent=((Date.now()-t0)
 setInterval(tick,200);
 function detailFor(k,j,prov){{var d=j.detail||{{}};
   if(k===0){{var p=[];if(d.duration_s!=null)p.push(d.duration_s+" s");if(d.resolution)p.push(d.resolution);if(d.sha12)p.push("sha "+d.sha12);
-    return (j.video_name||"video")+(p.length?" · "+p.join(" · "):" · reading file…");}}
+    var pre=d.converted_from?("Converted from "+d.converted_from+" to .mp4 for upload · "):"";
+    return pre+(j.video_name||"video")+(p.length?" · "+p.join(" · "):" · reading file…");}}
   if(k===1){{if(d.sample_total)return "Sampled "+d.sample_total+" frames"+(d.sample_times_s&&d.sample_times_s.length?" at "+d.sample_times_s.join(", ")+" … s":"");
     if(d.frame_count)return d.frame_count+" frames so far";return "Waiting for frames…";}}
   if(k===2){{return prov==="meta"?"Uploading original MP4 to api.meta.ai ("+(j.model||"Muse Spark")+")":"Using the built-in fixture (no model call)";}}
@@ -1006,6 +1091,8 @@ def _watch_job(job_id, out_dir, provider, started_at, proc_done):
                 if len(job.get("events", [])) < 100:
                     job.setdefault("events", []).append(
                         {"t": round(elapsed, 1), "msg": f"Stage: {PROGRESS_STAGES[idx]}"})
+            if job.get("converted_from"):
+                detail["converted_from"] = job["converted_from"]
             job["detail"] = detail
         time.sleep(0.5)
 
@@ -1019,6 +1106,20 @@ def run_cli_job(job_id, video_path, provider, task_hint=""):
                             started_at=started_at)
         video_name = jobs[job_id].get("video_name", "video")
     _push_event(job_id, 0.0, f"Job started · {provider} · {video_name}")
+    try:
+        video_path, provenance = prepare_upload(video_path)
+    except UploadError as exc:
+        with jobs_lock:
+            jobs[job_id].update(state="failed", error=str(exc), stage="Failed")
+        _push_event(job_id, time.time() - started_at, f"Failed: {exc}")
+        return
+    if provenance["note"] != "original mp4, no transcode":
+        _push_event(job_id, time.time() - started_at,
+                    f"Transcoded {provenance['original_name']} for upload")
+        with jobs_lock:
+            orig = provenance["original_name"]
+            jobs[job_id]["converted_from"] = ("." + orig.rsplit(".", 1)[-1].lower()
+                                               if "." in orig else "?")
     cmd = [sys.executable, "-B", "cli.py", str(video_path),
            "--workspace-path", str(WORKSPACE), "--provider", provider,
            "--out", f"runs/{out_name}"]
@@ -1053,7 +1154,12 @@ def run_cli_job(job_id, video_path, provider, task_hint=""):
         proc_done.set()
         watcher.join(timeout=5)
         rc = proc.returncode
-        err = "" if rc == 0 else clean_path_text("\n".join(log_lines[-6:]) or f"exit {rc}")
+        try:
+            (out_dir / "transcode.json").write_text(
+                json.dumps(provenance, ensure_ascii=False, indent=1))
+        except OSError:
+            pass
+        err = "" if rc == 0 else plain_cli_error(clean_path_text("\n".join(log_lines[-6:]) or f"exit {rc}"))
         cost = None
         steps_done = []
         if provider == "meta" and rc == 0:
@@ -1532,14 +1638,17 @@ class Handler(BaseHTTPRequestHandler):
         video = None
         if "video" in files and files["video"][0]:
             fname, data = files["video"]
-            if not fname.lower().endswith(".mp4"):
-                return self.send_html("<h1>Only .mp4 accepted</h1>", 400)
+            if not fname.lower().endswith(ALLOWED_EXTS):
+                return self.send_html(
+                    f"<h1>Only video files accepted</h1><p>{EXT_LABEL} · max 100 MB.</p>", 400)
             UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
             safe = re.sub(r"[^A-Za-z0-9_.\-]", "_", Path(fname).name)[:60]
             video = UPLOAD_DIR / f"{int(time.time())}_{safe}"
             video.write_bytes(data)
         else:
             return self.send_html("<h1>Upload a file</h1>", 400)
+        if not _ffprobe_ok(video):
+            return self.send_html(f"<h1>Cannot read this file</h1><p>{UNREADABLE_MSG}</p>", 400)
         if provider == "mock" and not mock_fixture_matches(video):
             return self.send_html("<h1>Fixture does not match this video (mock supports only the synthetic clip)</h1>", 400)
         if provider == "meta":

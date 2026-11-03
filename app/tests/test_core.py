@@ -160,6 +160,37 @@ irrelevant log line
         with self.assertRaises(AppError):
             MetaProvider()
 
+    def test_meta_http_errors_plain_and_no_retry(self):
+        manifest, _ = self.fixture(self.base)
+        video = self.base / "unit.mp4"
+        video.write_bytes(b"original-mp4-with-audio-unit-bytes")
+        manifest["source"].update(provider="meta", mock=False, video_sha256=sha256(video))
+        real_client = httpx.Client
+
+        def run_with(handler):
+            with patch.dict(os.environ, {"META_API_KEY": "unit-test-placeholder"}), \
+                    patch("providers.httpx.Client",
+                          side_effect=lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw)):
+                return MetaProvider(confirm_paid=True).generate(video, manifest, self.schema)
+
+        def h401(request):
+            return httpx.Response(401, json={"error": "bad key"})
+        with self.assertRaises(AppError) as cm:
+            run_with(h401)
+        self.assertIn("401", str(cm.exception))
+
+        def htimeout(request):
+            raise httpx.ConnectTimeout("slow")
+        with self.assertRaises(AppError) as cm:
+            run_with(htimeout)
+        self.assertIn("timed out", str(cm.exception))
+
+        def hdown(request):
+            raise httpx.ConnectError("down")
+        with self.assertRaises(AppError) as cm:
+            run_with(hdown)
+        self.assertIn("Meta request failed", str(cm.exception))
+
     def test_mcp_optional_explicit_url_initialize_and_single_call(self):
         manifest, doc = self.fixture(self.base)
         payload = plan_payload(doc, manifest, str(APP_DIR))
