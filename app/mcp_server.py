@@ -63,6 +63,8 @@ TOOLS = [
                            "description": "Required true for provider=meta"},
           "task_hint": {"type": "string", "default": "",
                        "description": "Short operator hint, naming help only (<=200 chars)"},
+          "keyframes": {"type": "boolean", "default": True,
+                        "description": "Also send full-resolution frames (default on; costs ~$0.014 more)"},
       }}),
     ("get_result", "Read a finished run: manual + operations + state.",
      {"type": "object",
@@ -111,7 +113,7 @@ def resolve_video(path, example):
     return v
 
 
-def run_cli_blocking(video, provider, model="muse-spark-1.2", task_hint=""):
+def run_cli_blocking(video, provider, model="muse-spark-1.2", task_hint="", keyframes=True):
     out_name = f"mcp-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     out_dir = RUNS_DIR / out_name
     cmd = [sys.executable, "-B", "cli.py", str(video),
@@ -124,6 +126,8 @@ def run_cli_blocking(video, provider, model="muse-spark-1.2", task_hint=""):
         hint = " ".join(str(task_hint or "").split())[:200]
         if hint:
             cmd += ["--task-hint", hint]
+        if not keyframes:
+            cmd.append("--no-keyframes")
         if not os.environ.get("META_API_KEY", "").strip():
             key = effective_meta_key()
             if key:
@@ -192,7 +196,8 @@ async def handle_call_tool(name, arguments):
                 if not effective_meta_key():
                     raise ValueError("no META_API_KEY (export it or use app/.env)")
             hint = " ".join(str(args.get("task_hint", "") or "").split())[:200]
-            return text_result(await asyncio.to_thread(run_cli_blocking, video, provider, model, hint))
+            keyframes = bool(args.get("keyframes", True))
+            return text_result(await asyncio.to_thread(run_cli_blocking, video, provider, model, hint, keyframes))
         if name == "get_result":
             d = safe_run_dir(args.get("run_id", ""))
             if d is None:

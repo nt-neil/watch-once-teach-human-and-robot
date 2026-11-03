@@ -1,0 +1,44 @@
+{
+ "schema_version": "eval-gt-1.0",
+ "clip": "ui-b-vertical-noaudio.mp4",
+ "clip_sha256": "02d4030030bb344520606612836b0376923625e4f340cc05442057665b1404a1",
+ "split": "dev",
+ "video_kind": "procedural",
+ "status": "frozen",
+ "frozen_by": "tester (個人經營指揮) 2026-11-03",
+ "annotation_method": "Exact action timestamps logged by the recording script (ego actions), not visual annotation; tolerance ±1.0s for scoring",
+ "duration_ms": 9917,
+ "events": [
+  {
+   "id": "GT1",
+   "label": "focus input",
+   "t_ms": 1638
+  },
+  {
+   "id": "GT2",
+   "label": "type: Buy milk",
+   "t_ms": 2675
+  },
+  {
+   "id": "GT3",
+   "label": "click 新增",
+   "t_ms": 4086
+  },
+  {
+   "id": "GT4",
+   "label": "toggle checkbox #1",
+   "t_ms": 5672
+  },
+  {
+   "id": "GT5",
+   "label": "click 清除已完成",
+   "t_ms": 7397
+  }
+ ],
+ "keywords": [
+  "Buy milk",
+  "新增",
+  "清除已完成"
+ ],
+ "notes": "Vertical 390x844, no audio track"
+}

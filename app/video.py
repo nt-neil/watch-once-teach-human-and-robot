@@ -70,6 +70,48 @@ def parse_samples(log):
     return origin, samples
 
 
+def extract_keyframes(video_path, output_dir, manifest, interval_ms=3000, max_frames=15):
+    """Pick full-resolution frames at fixed intervals for model input (E2).
+
+    Scene detection misses small UI changes, so sample uniformly: every
+    interval_ms guarantees half-interval coverage of any event. Images are
+    NOT downscaled. Stops at max_frames.
+    """
+    video_path, output_dir = Path(video_path), Path(output_dir)
+    origin = manifest["timeline_origin_ms"]
+    duration_ms = manifest["source"]["duration_ms"]
+    stream_index = manifest["video_stream_index"]
+    kf_dir = output_dir / "keyframes"
+    kf_dir.mkdir(exist_ok=True)
+    for old in kf_dir.glob("*.jpg"):
+        old.unlink()
+    filters = (f"showinfo@source,select=isnan(prev_selected_t)+gte(t-prev_selected_t\\,{interval_ms / 1000}),"
+               "showinfo@sample")
+    result = run_media([
+        "ffmpeg", "-hide_banner", "-nostdin", "-v", "info", "-xerror",
+        "-copyts", "-i", str(video_path), "-map", f"0:{stream_index}",
+        "-an", "-sn", "-dn", "-vf", filters, "-fps_mode", "passthrough",
+        "-frames:v", str(max_frames), "-q:v", "2", str(kf_dir / "kf-%06d.jpg"),
+    ])
+    _, samples = parse_samples(result.stderr)
+    files = sorted(kf_dir.glob("*.jpg"))
+    if len(files) != len(samples) or not samples:
+        raise AppError("Decoded keyframe/image counts differ.")
+    out = []
+    for i, (frame, path) in enumerate(zip(samples, files), 1):
+        if path.stat().st_size == 0:
+            raise AppError("A keyframe image is empty.")
+        sample_ms = round(frame["pts_time_ms"] - origin, 6)
+        if not 0 <= sample_ms < duration_ms:
+            continue
+        out.append({"id": f"kf-{i:06d}", "file": f"keyframes/{path.name}",
+                    "image_sha256": sha256(path), "sample_time_ms": sample_ms,
+                    "source_frame": frame["source_frame"], "pts": frame["pts"]})
+    if not out:
+        raise AppError("Keyframe extraction found no frames.")
+    return out
+
+
 def extract(video_path, output_dir, provider, interval_ms=1000):
     video_path, output_dir = Path(video_path), Path(output_dir)
     if not video_path.is_file() or video_path.suffix.lower() != ".mp4":
@@ -116,6 +158,7 @@ def extract(video_path, output_dir, provider, interval_ms=1000):
         "schema_version": "1.0", "source": source, "video_stream_index": stream["index"],
         "source_duration_ms": duration_ms, "video_duration_ms": video_duration_ms,
         "time_base": stream["time_base"], "timeline_origin_ms": origin,
+        "video_fps": stream.get("avg_frame_rate", "0/0"),
         "sample_interval_ms": interval_ms,
         "has_audio": any(s.get("codec_type") == "audio" for s in probe["streams"]),
         "frames": samples,

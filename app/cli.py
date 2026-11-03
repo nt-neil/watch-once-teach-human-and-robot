@@ -12,8 +12,8 @@ import sys
 from common import AppError, read_json, write_json
 from navide import plan_payload, submit_plan
 from providers import MetaProvider, MockProvider
-from validation import validate_operations
-from video import extract
+from validation import clamp_document, repair_frame_refs, validate_operations
+from video import extract, extract_keyframes
 
 APP_DIR = Path(__file__).resolve().parent
 
@@ -44,7 +44,8 @@ def manual(document, manifest):
 def run(args):
     if not Path(args.workspace_path).is_absolute():
         raise AppError("--workspace-path must be an absolute workspace root.")
-    provider = (MetaProvider(args.model, args.confirm_paid_api, args.prompt_version, args.task_hint) if args.provider == "meta"
+    provider = (MetaProvider(args.model, args.confirm_paid_api, args.prompt_version, args.task_hint,
+                               keyframes=False) if args.provider == "meta"
                 else MockProvider(args.mock_response or APP_DIR / "fixtures/synthetic-response.json"))
     if args.provider == "meta" and args.mock_response:
         raise AppError("--mock-response is only valid with --provider mock.")
@@ -59,9 +60,31 @@ def run(args):
         schema = read_json(APP_DIR / "operation.schema.json")
         manifest = extract(Path(args.video).resolve(), out, args.provider, args.sample_interval_ms)
         source = manifest["source"]
+        if args.two_stage and args.provider != "meta":
+            raise AppError("--two-stage is only valid with --provider meta.")
+        use_kf = (args.keyframes or args.two_stage) and args.provider == "meta"
+        if use_kf:
+            manifest["keyframes"] = extract_keyframes(Path(args.video).resolve(), out, manifest, interval_ms=args.kf_interval_ms, max_frames=50)
+            provider.keyframe_dir = out
+            provider.keyframes = True
         write_json(out / "frames.json", manifest)
+        if args.two_stage:
+            if args.prompt_version != "v8":
+                raise AppError("--two-stage requires --prompt-version v8.")
+            desc_schema = read_json(APP_DIR / "desc.schema.json")
+            table, desc_meta = provider.describe(manifest, desc_schema)
+            write_json(out / "desc.json", {"source": source, "metadata": desc_meta, "table": table})
+            manifest["desc_table"] = table.get("frames", [])
         document, metadata = provider.generate(Path(args.video).resolve(), manifest, schema)
         write_json(out / "provider-result.json", {"source": source, "metadata": metadata, "response": document})
+        document, clamped = clamp_document(document, manifest)
+        if clamped:
+            write_json(out / "clamped.json", {"clamped_step_ids": clamped,
+                       "note": "Boundaries clamped into [0, duration]; see provider-result.json for raw output."})
+        document, repaired = repair_frame_refs(document, manifest)
+        if repaired:
+            write_json(out / "repaired.json", {"repaired_step_ids": repaired,
+                       "note": "Out-of-range frame refs dropped; flagged steps carry a needs_review evidence prefix."})
         validate_operations(document, schema, manifest, out)
         payload = plan_payload(document, manifest, args.workspace_path)
         # No task payload or manual exists before both schema and semantic validation pass.
@@ -89,12 +112,16 @@ def parser():
     result.add_argument("--provider", choices=("mock", "meta"), default="mock")
     result.add_argument("--model", choices=("muse-spark-1.2", "muse-spark-1.3"), default="muse-spark-1.2")
     result.add_argument("--confirm-paid-api", action="store_true", help="Explicitly permit a paid original-MP4 upload and inference")
-    result.add_argument("--prompt-version", choices=("v1", "v2", "v3", "v4", "v5"), default="v5")
+    result.add_argument("--prompt-version", choices=("v1", "v2", "v3", "v4", "v5", "v6", "v6-speech", "v7", "v8"), default="v6")
     result.add_argument("--task-hint", default="", help="Short operator hint, naming help only (<=200 chars)")
     result.add_argument("--mock-response", help='JSON fixture with only {"steps": [...]}')
     result.add_argument("--sample-interval-ms", type=int, default=1000)
     result.add_argument("--out", help="New output directory inside app/; default runs/<UTC timestamp>")
     result.add_argument("--send-navide", action="store_true", help="One plan_create attempt using only explicit NAVIDE_MCP_URL")
+    result.add_argument("--keyframes", action=argparse.BooleanOptionalAction, default=True,
+                        help="Also send full-resolution frames as images (default on; --no-keyframes to disable)")
+    result.add_argument("--two-stage", action="store_true", help="Describe keyframes first, then segment with the table (b; two paid calls)")
+    result.add_argument("--kf-interval-ms", type=int, default=3000, help="Keyframe interval in ms (default 3000; UI dense: 500)")
     return result
 
 

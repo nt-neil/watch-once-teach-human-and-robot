@@ -86,6 +86,7 @@ class McpStdioTests(unittest.TestCase):
         self.assertEqual(schema["inputSchema"]["properties"]["model"]["enum"],
                          ["muse-spark-1.2", "muse-spark-1.3"])
         self.assertIn("task_hint", schema["inputSchema"]["properties"])
+        self.assertEqual(schema["inputSchema"]["properties"]["keyframes"]["default"], True)
         bad_model = call("tools/call", {"name": "analyze_video",
                                        "arguments": {"example": "synthetic", "model": "gpt-9"}})
         self.assertTrue(bad_model.get("isError"))

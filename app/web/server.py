@@ -520,6 +520,10 @@ def plain_cli_error(raw):
         return "Meta took too long to answer (timeout). Nothing was retried; try again later."
     if "Meta request failed" in t:
         return "Could not reach Meta (network error). Check your connection and try again."
+    if "outside its step time range" in t or "nonexistent source frame" in t:
+        return "The model's steps didn't line up with the video frames. Please try again."
+    if "failed schema validation" in t or "non-empty strings" in t or "non-overlapping" in t:
+        return "The model's answer had a formatting problem. Please try again."
     return t
 
 
@@ -704,6 +708,7 @@ h2{font-size:19px;margin:22px 0 8px}h3{font-size:16px;margin:16px 0 6px}
 .step .ev{color:#3d4a44}
 .hintline{font-size:14px;color:#3d4a44;margin:4px 0}
 .warnline{font-size:14px;color:#8a4d00;font-weight:600;margin:4px 0}
+.nrbadge{font-size:12px;font-weight:600;color:#8a4d00;background:#fff3e0;border:1px solid #e0a63f;border-radius:10px;padding:1px 8px;white-space:nowrap}
 .hero{display:grid;grid-template-columns:1.15fr .85fr;gap:20px;align-items:center;margin:2px 0 18px}
 @media(max-width:900px){.hero{grid-template-columns:1fr}}
 .hero h1{font-size:30px}
@@ -881,6 +886,7 @@ HOME_TMPL = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 <p><button type="button" class="ghost small" id="rmfile" hidden>Remove</button></p>
 <label class="f" for="hintin">What is in the clip? (optional, naming help only)</label>
 <div><input type="text" id="hintin" name="task_hint" maxlength="200" autocomplete="off" placeholder="e.g. washers on a shaft"></div>
+<label class="f"><input type="checkbox" name="vote3" value="yes"> Majority vote: run 3 times and merge (~3&times; cost, steadier steps)</label>
 {cta}
 <div class="keyline">
 {key_status}
@@ -1144,7 +1150,52 @@ def _watch_job(job_id, out_dir, provider, started_at, proc_done):
         time.sleep(0.5)
 
 
-def run_cli_job(job_id, video_path, provider, task_hint=""):
+def _merge_vote_rounds(job_id, out_dir, round_dirs, started_at):
+    """Merge 3 voted runs into out_dir. Returns rc (0 ok)."""
+    try:
+        if str(APP_DIR) not in sys.path:
+            sys.path.insert(0, str(APP_DIR))
+        if str(APP_DIR / "scripts") not in sys.path:
+            sys.path.insert(0, str(APP_DIR / "scripts"))
+        from vote import merge_runs
+        from cli import manual
+        from navide import plan_payload
+        base, stats = merge_runs([str(d) for d in round_dirs])
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "operations.json").write_text(json.dumps(base, ensure_ascii=False, indent=1))
+        (out_dir / "vote.json").write_text(json.dumps(stats, ensure_ascii=False, indent=1))
+        total_in = total_out = 0
+        for d in round_dirs:
+            usage = json.loads((d / "provider-result.json").read_text()).get("metadata", {}).get("usage", {})
+            total_in += int(usage.get("input_tokens", 0) or 0)
+            total_out += int(usage.get("output_tokens", 0) or 0)
+        first = json.loads((round_dirs[0] / "provider-result.json").read_text())
+        first["metadata"]["usage"] = {"input_tokens": total_in, "output_tokens": total_out}
+        first["metadata"]["vote"] = stats
+        first["response"] = base
+        (out_dir / "provider-result.json").write_text(json.dumps(first, ensure_ascii=False, indent=1))
+        manifest = json.loads((round_dirs[0] / "frames.json").read_text())
+        (out_dir / "frames.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1))
+        import shutil
+        src_frames = round_dirs[0] / "frames"
+        if src_frames.is_dir():
+            shutil.copytree(src_frames, out_dir / "frames", dirs_exist_ok=True)
+        (out_dir / "manual.md").write_text(manual(base, manifest), encoding="utf-8")
+        payload = plan_payload(base, manifest, str(WORKSPACE))
+        (out_dir / "navide-plan.json").write_text(json.dumps(payload, ensure_ascii=False, indent=1))
+        sub = {"source": base["source"], "status": "exported_not_sent",
+               "reason": "JSON export only; --send-navide was not requested."}
+        (out_dir / "submission.json").write_text(json.dumps(sub, ensure_ascii=False, indent=1))
+        _push_event(job_id, time.time() - started_at,
+                    f"Voted: {stats['n_steps']} steps, {stats['agreed']} agreed, "
+                    f"{stats['needs_review']} needs_review")
+        return 0
+    except (OSError, ValueError, KeyError, ImportError) as exc:
+        _push_event(job_id, time.time() - started_at, f"Vote merge failed: {exc}")
+        return 1
+
+
+def run_cli_job(job_id, video_path, provider, task_hint="", vote3=False):
     out_name = f"web-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     out_dir = RUNS_DIR / out_name
     started_at = time.time()
@@ -1152,7 +1203,8 @@ def run_cli_job(job_id, video_path, provider, task_hint=""):
         jobs[job_id].update(state="running", stage=PROGRESS_STAGES[0], run_id=out_name,
                             started_at=started_at)
         video_name = jobs[job_id].get("video_name", "video")
-    _push_event(job_id, 0.0, f"Job started · {provider} · {video_name}")
+    voted = " · majority vote x3" if vote3 else ""
+    _push_event(job_id, 0.0, f"Job started · {provider}{voted} · {video_name}")
     try:
         video_path, provenance = prepare_upload(video_path)
     except UploadError as exc:
@@ -1165,40 +1217,49 @@ def run_cli_job(job_id, video_path, provider, task_hint=""):
                     f"Transcoded {provenance['original_name']} for upload")
         with jobs_lock:
             jobs[job_id]["converted_from"] = provenance.get("source", "?")
-    cmd = [sys.executable, "-B", "cli.py", str(video_path),
-           "--workspace-path", str(WORKSPACE), "--provider", provider,
-           "--out", f"runs/{out_name}"]
+    base_cmd = [sys.executable, "-B", "cli.py", str(video_path),
+                "--workspace-path", str(WORKSPACE), "--provider", provider]
     if provider == "meta":
-        cmd.append("--confirm-paid-api")
-        cmd += ["--model", get_limits()["model"]]
+        base_cmd.append("--confirm-paid-api")
+        base_cmd += ["--model", get_limits()["model"]]
         hint = " ".join(str(task_hint or "").split())[:200]
         if hint:
-            cmd += ["--task-hint", hint]
+            base_cmd += ["--task-hint", hint]
+    rounds = [f"runs/{out_name}-v{i}" for i in (1, 2, 3)] if vote3 else [f"runs/{out_name}"]
     try:
         env = None
         if provider == "meta" and not os.environ.get("META_API_KEY", "").strip():
             file_key = dotenv_key()
             if file_key:
                 env = dict(os.environ, META_API_KEY=file_key)
-        proc = subprocess.Popen(cmd, cwd=str(APP_DIR), stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT, text=True, env=env)
-        proc_done = threading.Event()
-        watcher = threading.Thread(target=_watch_job,
-                                   args=(job_id, out_dir, provider, started_at, proc_done),
-                                   daemon=True)
-        watcher.start()
         log_lines = []
-        while True:
-            line = proc.stdout.readline()
-            if line:
-                log_lines.append(clean_path_text(line.rstrip()))
-                with jobs_lock:
-                    jobs[job_id]["log_tail"] = "\n".join(log_lines[-12:])
-            if line == "" and proc.poll() is not None:
+        rc = 0
+        for ri, out_sub in enumerate(rounds, 1):
+            if vote3:
+                _push_event(job_id, time.time() - started_at, f"Vote pass {ri}/3")
+            cmd = base_cmd + ["--out", out_sub]
+            proc = subprocess.Popen(cmd, cwd=str(APP_DIR), stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT, text=True, env=env)
+            proc_done = threading.Event()
+            watcher = threading.Thread(target=_watch_job,
+                                       args=(job_id, RUNS_DIR / out_sub, provider, started_at, proc_done),
+                                       daemon=True)
+            watcher.start()
+            while True:
+                line = proc.stdout.readline()
+                if line:
+                    log_lines.append(clean_path_text(line.rstrip()))
+                    with jobs_lock:
+                        jobs[job_id]["log_tail"] = "\n".join(log_lines[-12:])
+                if line == "" and proc.poll() is not None:
+                    break
+            proc_done.set()
+            watcher.join(timeout=5)
+            rc = proc.returncode
+            if rc != 0:
                 break
-        proc_done.set()
-        watcher.join(timeout=5)
-        rc = proc.returncode
+        if vote3 and rc == 0:
+            rc = _merge_vote_rounds(job_id, out_dir, [RUNS_DIR / s for s in rounds], started_at)
         try:
             (out_dir / "transcode.json").write_text(
                 json.dumps(provenance, ensure_ascii=False, indent=1))
@@ -1215,7 +1276,7 @@ def run_cli_job(job_id, video_path, provider, task_hint=""):
                 outp = int(usage.get("output_tokens", 0))
                 cost = inp * 1.25 / 1e6 + outp * 4.25 / 1e6
                 b = load_budget()
-                b["paid_calls"] = int(b.get("paid_calls", 0)) + 1
+                b["paid_calls"] = int(b.get("paid_calls", 0)) + (3 if vote3 else 1)
                 b["spend_usd"] = round(float(b.get("spend_usd", 0.0)) + cost, 8)
                 save_budget(b)
             except (ValueError, OSError, KeyError):
@@ -1472,8 +1533,8 @@ class Handler(BaseHTTPRequestHandler):
                           'The key never leaves this machine and is never shown here.</p></div>')
         if last4:
             cta = ('<label class="f"><input type="checkbox" name="confirm" value="yes"> '
-                   'This analysis uses your Meta API credit (about US$0.01 for a 14s clip; '
-                   'depends on video length).</label>'
+                   'This analysis uses your Meta API credit (about US$0.02-0.03 for a 14s clip, '
+                   'includes full-resolution keyframes; depends on video length).</label>'
                    '<div class="btnrow"><button type="submit" class="big">Analyze</button></div>')
         else:
             cta = ('<div class="btnrow"><button type="button" class="big" data-opendlg>'
@@ -1553,9 +1614,10 @@ class Handler(BaseHTTPRequestHandler):
                 fn = frame_file_for(d, refs[0])
                 if fn:
                     img = f"<img alt=\"step {i} frame\" src=\"/frames/{esc(d.name)}/{esc(fn)}\" loading=\"lazy\">"
+            nr = " <span class=\"nrbadge\">needs review</span>" if str(s.get("evidence") or "").startswith("needs_review") else ""
             cards.append(
                 f"<div class=\"step\" data-step=\"{i}\">{img}<div class=\"t\">"
-                f"<b>Step {i} · {esc(c.get('action', '?')[:60])}</b><br>"
+                f"<b>Step {i} · {esc(c.get('action', '?')[:60])}</b>{nr}<br>"
                 f"{esc(c.get('object', '?')[:80])} &rarr; {esc(c.get('target', '?')[:80])}<br>"
                 f"<small class=\"ev\">Evidence: {esc(str(s.get('evidence') or 'not recorded — run predates the evidence field')[:140])}</small><br>"
                 f"<code>{s.get('start_ms', '?')}–{s.get('end_ms', '?')} ms</code> "
@@ -1715,7 +1777,8 @@ class Handler(BaseHTTPRequestHandler):
                             "started_at": time.time(), "events": [], "detail": {},
                             "cost_usd": None, "steps_done": []}
         hint = " ".join(str(fields.get("task_hint", "") or "").split())[:200]
-        th = threading.Thread(target=run_cli_job, args=(job_id, video, provider, hint), daemon=True)
+        vote3 = str(fields.get("vote3", "") or "").strip().lower() == "yes"
+        th = threading.Thread(target=run_cli_job, args=(job_id, video, provider, hint, vote3), daemon=True)
         th.start()
         self.send_response(303)
         self.send_header("Location", f"/job/{job_id}")

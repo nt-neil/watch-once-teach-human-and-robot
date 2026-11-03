@@ -15,7 +15,7 @@ import httpx
 from cli import APP_DIR, parser, run
 from common import AppError, read_json, sha256, write_json
 from navide import plan_payload, submit_plan
-from providers import MetaProvider, parse_meta_response
+from providers import MetaProvider, parse_meta_response, remote_schema_for
 from validation import validate_operations
 from video import check_probe, parse_samples
 
@@ -99,6 +99,89 @@ irrelevant log line
         with self.assertRaises(AppError):
             validate_operations(doc, self.schema, manifest, self.base)
 
+    def test_frame_ref_tolerates_one_frame_at_step_boundary(self):
+        manifest, doc = self.fixture(self.base)
+        manifest["video_fps"] = "30/1"
+        # R4 case: sample exactly on the exclusive end is accepted.
+        doc["steps"][0].update(source_frame_refs=["frame-000002"])
+        validate_operations(doc, self.schema, manifest, self.base)
+        # R2 case: sample 1 ms before start is accepted.
+        doc["steps"][1].update(start_ms=1001, source_frame_refs=["frame-000002"])
+        validate_operations(doc, self.schema, manifest, self.base)
+        # Far outside the step is still rejected.
+        doc["steps"][1].update(source_frame_refs=["frame-000001"])
+        with self.assertRaises(AppError):
+            validate_operations(doc, self.schema, manifest, self.base)
+
+    def test_frame_ref_tolerance_falls_back_without_fps(self):
+        manifest, doc = self.fixture(self.base)
+        self.assertNotIn("video_fps", manifest)
+        doc["steps"][0].update(source_frame_refs=["frame-000002"])
+        validate_operations(doc, self.schema, manifest, self.base)
+        doc["steps"][1].update(source_frame_refs=["frame-000001"])
+        with self.assertRaises(AppError):
+            validate_operations(doc, self.schema, manifest, self.base)
+
+    def test_repair_frame_refs_drops_out_of_range_and_marks_review(self):
+        # Real case: runs/web-20261103T142454Z step-001 (3000-8000ms) cited
+        # frame@2000ms; the whole paid run failed on one bad ref. Repair must
+        # drop the ref, flag the step, and let validation pass.
+        from validation import repair_frame_refs
+        manifest, doc = self.fixture(self.base)
+        manifest["video_fps"] = "30/1"
+        doc["steps"][0].update(source_frame_refs=["frame-000001", "frame-000003"])
+        with self.assertRaises(AppError):
+            validate_operations(doc, self.schema, manifest, self.base)
+        doc, repaired = repair_frame_refs(doc, manifest)
+        self.assertEqual(repaired, ["observe"])
+        self.assertEqual(doc["steps"][0]["source_frame_refs"], ["frame-000001"])
+        self.assertTrue(doc["steps"][0]["evidence"].startswith("needs_review"))
+        validate_operations(doc, self.schema, manifest, self.base)
+
+    def test_repair_frame_refs_keeps_closest_when_all_out_of_range(self):
+        from validation import repair_frame_refs
+        manifest, doc = self.fixture(self.base)
+        manifest["video_fps"] = "30/1"
+        doc["steps"][0].update(start_ms=2000, end_ms=3000,
+                               source_frame_refs=["frame-000001", "frame-000002"])
+        del doc["steps"][1]
+        doc, repaired = repair_frame_refs(doc, manifest)
+        self.assertEqual(repaired, ["observe"])
+        self.assertEqual(doc["steps"][0]["source_frame_refs"], ["frame-000002"])
+        self.assertTrue(doc["steps"][0]["evidence"].startswith("needs_review"))
+        validate_operations(doc, self.schema, manifest, self.base)
+
+    def test_clamp_document_pulls_overshoot_into_range(self):
+        from validation import clamp_document
+        manifest, doc = self.fixture(self.base)
+        doc["steps"][1].update(end_ms=5000)
+        doc, clamped = clamp_document(doc, manifest)
+        self.assertEqual(clamped, ["compare"])
+        self.assertEqual(doc["steps"][1]["end_ms"], 3000)
+        validate_operations(doc, self.schema, manifest, self.base)
+        doc["steps"][0].update(start_ms=-50, end_ms=1000)
+        doc, clamped = clamp_document(doc, manifest)
+        self.assertEqual(doc["steps"][0]["start_ms"], 0)
+
+    def test_video_kind_gate_empty_steps_rules(self):
+        manifest, doc = self.fixture(self.base)
+        # non_procedural must have empty steps.
+        nonp = copy.deepcopy(doc)
+        nonp.update(video_kind="non_procedural", steps=[])
+        validate_operations(nonp, self.schema, manifest, self.base)
+        nonp["steps"] = doc["steps"]
+        with self.assertRaises(AppError):
+            validate_operations(nonp, self.schema, manifest, self.base)
+        # procedural (default) must have at least one step.
+        empty = copy.deepcopy(doc)
+        empty.update(steps=[])
+        with self.assertRaises(AppError):
+            validate_operations(empty, self.schema, manifest, self.base)
+        # uncertain may have empty steps (wrapper shows a warning).
+        unc = copy.deepcopy(doc)
+        unc.update(video_kind="uncertain", steps=[])
+        validate_operations(unc, self.schema, manifest, self.base)
+
     def test_mock_pipeline_marks_outputs_and_invalid_output_creates_no_task(self):
         def fake_extract(video, out, provider, interval):
             return self.fixture(out)[0]
@@ -139,10 +222,11 @@ irrelevant log line
                 self.assertIn(b'user_data', request.content)
                 return httpx.Response(200, json={"id": "file-test"})
             request_body = json.loads(request.content)
-            self.assertEqual(request_body["text"]["format"]["schema"], self.schema)
+            self.assertEqual(request_body["text"]["format"]["schema"],
+                             remote_schema_for(self.schema, "v6"))
             self.assertIs(request_body["text"]["format"]["strict"], True)
             self.assertEqual(request_body["input"][0]["content"][1], {"type": "input_file", "file_id": "file-test"})
-            self.assertEqual(request_body["max_output_tokens"], 4000)
+            self.assertEqual(request_body["max_output_tokens"], 8000)
             self.assertIs(request_body["stream"], False)
             return httpx.Response(200, json=body)
         real_client = httpx.Client
@@ -159,6 +243,113 @@ irrelevant log line
                 parse_meta_response(bad)
         with self.assertRaises(AppError):
             MetaProvider()
+
+    def test_keyframes_mixed_send_and_400_fallback(self):
+        manifest, doc = self.fixture(self.base)
+        video = self.base / "unit.mp4"
+        video.write_bytes(b"original-mp4-with-audio-unit-bytes")
+        manifest["source"].update(provider="meta", mock=False, video_sha256=sha256(video))
+        kf_path = self.base / "kf-000001.jpg"
+        kf_path.write_bytes(b"explicit-keyframe-bytes")
+        manifest["keyframes"] = [{"id": "kf-000001", "file": "kf-000001.jpg",
+                                  "image_sha256": sha256(kf_path), "sample_time_ms": 2000,
+                                  "source_frame": 60, "pts": 60}]
+        doc["source"] = copy.deepcopy(manifest["source"])
+        body = {"status": "completed", "output": [
+            {"type": "message", "content": [{"type": "output_text", "text": json.dumps(doc)}]}],
+            "usage": {"input_tokens": 20, "output_tokens": 50}}
+        seen = {}
+
+        def handler(request):
+            if request.url.path == "/v1/files":
+                return httpx.Response(200, json={"id": "file-%d" % len(seen.setdefault("up", []))})
+            rb = json.loads(request.content)
+            seen.setdefault("responses", []).append(rb)
+            if len(seen["responses"]) == 1:
+                types = [c["type"] for c in rb["input"][0]["content"]]
+                self.assertIn("input_file", types)
+                self.assertIn("input_image", types)
+                self.assertTrue(any("kf-000001" in c.get("text", "") for c in rb["input"][0]["content"]
+                                    if c["type"] == "input_text"))
+                return httpx.Response(400, json={"error": "mixed"})
+            types = [c["type"] for c in rb["input"][0]["content"]]
+            self.assertNotIn("input_file", types)
+            self.assertIn("input_image", types)
+            return httpx.Response(200, json=body)
+
+        real_client = httpx.Client
+        with patch.dict(os.environ, {"META_API_KEY": "unit-test-placeholder"}), \
+                patch("providers.httpx.Client",
+                      side_effect=lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw)):
+            prov = MetaProvider(confirm_paid=True, keyframe_dir=self.base, keyframes=True)
+            result, meta = prov.generate(video, manifest, self.schema)
+        self.assertEqual(result["steps"], doc["steps"])
+        self.assertEqual(len(seen["responses"]), 2)
+
+    def test_keyframes_default_on_and_mock_skips(self):
+        args = parser().parse_args(["unit.mp4", "--workspace-path", str(self.base),
+                                    "--out", str(self.base / "o")])
+        self.assertTrue(args.keyframes)
+        args = parser().parse_args(["unit.mp4", "--workspace-path", str(self.base),
+                                    "--out", str(self.base / "o"), "--no-keyframes"])
+        self.assertFalse(args.keyframes)
+        manifest, _ = self.fixture(self.base)
+        args = parser().parse_args(["unit.mp4", "--workspace-path", str(self.base),
+                                    "--out", str(self.base / "o"), "--keyframes"])
+        with patch("cli.extract", side_effect=lambda *a: self.fixture(a[1])[0]), \
+                patch("cli.extract_keyframes") as mock_kf:
+            run(args)
+            mock_kf.assert_not_called()
+
+    def test_keyframes_rejected_without_meta_or_files(self):
+        manifest, _ = self.fixture(self.base)
+        prov = MetaProvider(confirm_paid=True, keyframes=True)
+        with self.assertRaises(AppError) as cm:
+            prov._upload_keyframes(None, {}, manifest, {})
+        self.assertIn("none extracted", str(cm.exception))
+
+    def test_describe_sends_images_only(self):
+        manifest, _ = self.fixture(self.base)
+        kf_path = self.base / "kf-000001.jpg"
+        kf_path.write_bytes(b"explicit-keyframe-bytes")
+        manifest["keyframes"] = [{"id": "kf-000001", "file": "kf-000001.jpg",
+                                  "image_sha256": sha256(kf_path), "sample_time_ms": 2000,
+                                  "source_frame": 60, "pts": 60}]
+        table = {"schema_version": "1.0", "source": manifest["source"],
+                 "frames": [{"kf_id": "kf-000001", "t_s": 2.0, "text_seen": [], "state": "s"}]}
+        body = {"status": "completed", "output": [
+            {"type": "message", "content": [{"type": "output_text", "text": json.dumps(table)}]}],
+            "usage": {"input_tokens": 20, "output_tokens": 50}}
+        seen = {}
+
+        def handler(request):
+            if request.url.path == "/v1/files":
+                return httpx.Response(200, json={"id": "file-kf"})
+            rb = json.loads(request.content)
+            seen["body"] = rb
+            return httpx.Response(200, json=body)
+
+        real_client = httpx.Client
+        with patch.dict(os.environ, {"META_API_KEY": "unit-test-placeholder"}), \
+                patch("providers.httpx.Client",
+                      side_effect=lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw)):
+            prov = MetaProvider(confirm_paid=True, keyframe_dir=self.base, keyframes=True)
+            result, meta = prov.describe(manifest, read_json(APP_DIR / "desc.schema.json"))
+        types = [c["type"] for c in seen["body"]["input"][0]["content"]]
+        self.assertNotIn("input_file", types)
+        self.assertIn("input_image", types)
+        self.assertEqual(seen["body"]["text"]["format"]["name"], "frame_descriptions")
+        self.assertEqual(result["frames"][0]["kf_id"], "kf-000001")
+        self.assertEqual(meta["pass"], "describe")
+
+    def test_two_stage_requires_v8(self):
+        args = parser().parse_args(["unit.mp4", "--workspace-path", str(self.base),
+                                    "--out", str(self.base / "o"), "--provider", "meta",
+                                    "--confirm-paid-api", "--two-stage"])
+        with patch("cli.extract", side_effect=lambda *a: self.fixture(a[1])[0]), \
+                patch("cli.extract_keyframes", return_value=[]):
+            with self.assertRaises(AppError):
+                run(args)
 
     def test_meta_http_errors_plain_and_no_retry(self):
         manifest, _ = self.fixture(self.base)

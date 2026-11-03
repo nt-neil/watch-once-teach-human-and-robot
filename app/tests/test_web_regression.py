@@ -171,6 +171,27 @@ class WebRegressionTests(unittest.TestCase):
         self.assertEqual(len(started), 1)
         self.assertEqual(started[0][3], "washers on a shaft")
 
+    def test_vote3_checkbox_passed_to_worker(self):
+        syn = WEB.RUNS_DIR / "synthetic-fixture.mp4"
+        if not syn.is_file():
+            self.skipTest("synthetic fixture not present")
+        head, _, started = self._post_analyze(
+            [("provider", "mock"), ("vote3", "yes")],
+            file_content=syn.read_bytes(), filename="syn.mp4")
+        self.assertIn("303", head.splitlines()[0])
+        self.assertEqual(len(started), 1)
+        self.assertTrue(started[0][4])
+        head, _, started = self._post_analyze(
+            [("provider", "mock")],
+            file_content=syn.read_bytes(), filename="syn.mp4")
+        self.assertIn("303", head.splitlines()[0])
+        self.assertFalse(started[0][4])
+
+    def test_vote3_form_label_shows_cost(self):
+        head, data = request(b"GET / HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
+        self.assertIn("Majority vote", data.decode())
+        self.assertIn("3&times; cost", data.decode())
+
     def test_mock_fixture_matches(self):
         syn = WEB.RUNS_DIR / "synthetic-fixture.mp4"
         if not syn.is_file():
@@ -293,7 +314,7 @@ class WebRegressionTests(unittest.TestCase):
         self.assertIn("No runs yet", html)
         self.assertNotIn("Before: one frame in", html)
         self.assertIn("Set up your Meta API key to analyze", html)
-        self.assertNotIn("about US$0.01", html)
+        self.assertNotIn("about US$0.02-0.03", html)
         self.assertNotIn('name="provider"', html)
         self.assertNotIn('name="example"', html)
         self.assertIn("Budget used today:", html)
@@ -316,7 +337,8 @@ class WebRegressionTests(unittest.TestCase):
     def test_home_with_key_shows_analyze(self):
         html = self._get_home("sentinel-KEY-999")
         self.assertIn(">Analyze</button>", html)
-        self.assertIn("This analysis uses your Meta API credit (about US$0.01 for a 14s clip", html)
+        self.assertIn("This analysis uses your Meta API credit (about US$0.02-0.03 for a 14s clip", html)
+        self.assertIn("includes full-resolution keyframes", html)
         self.assertNotIn("Set up your Meta API key to analyze", html)
         self.assertNotIn("sentinel-KEY-999", html)
 

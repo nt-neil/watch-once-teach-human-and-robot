@@ -109,11 +109,49 @@ def parse_meta_response(body):
     return document, saved_usage
 
 
-PROMPT_VERSIONS = ("v1", "v2", "v3", "v4", "v5")
+PROMPT_VERSIONS = ("v1", "v2", "v3", "v4", "v5", "v6", "v6-speech", "v7", "v8")
 
 
 def sanitize_hint(task_hint):
     return " ".join(str(task_hint or "").split())[:200]
+
+
+def build_desc_prompt(manifest):
+    return (
+        "Describe each attached keyframe image in order. For each image, return its kf id, "
+        "its t= seconds, text_seen (every readable on-screen word, copied verbatim; empty "
+        "array when no text is readable), and state (one sentence: what objects/controls "
+        "are visible and their state). Do not guess unreadable words. "
+        "Return schema_version=1.0 and copy this source unchanged: "
+        + json.dumps(manifest["source"], ensure_ascii=False)
+    )
+
+
+V6_TOP_FIELDS = ("video_kind", "kind_reason", "kind_evidence", "proc_start_ms",
+                 "proc_end_ms", "speech")
+
+
+def remote_schema_for(schema, version):
+    """Shape sent to strict json_schema: required must list every property key.
+
+    v1-v5 keep the original shape (no v6 fields); v6+ get the full shape with
+    completed required lists. Local validation always uses the file schema.
+    """
+    out = copy.deepcopy(schema)
+    props = out["properties"]
+    if version in ("v6", "v6-speech", "v7", "v8"):
+        out["required"] = list(props)
+        for step in [out["properties"]["steps"]["items"]]:
+            step["required"] = list(step["properties"])
+        speech = props["speech"]["properties"]
+        out["properties"]["speech"]["required"] = list(speech)
+        turns = speech["turns"]["items"]["properties"]
+        speech["turns"]["items"]["required"] = list(turns)
+    else:
+        for field in V6_TOP_FIELDS:
+            props.pop(field, None)
+        out["properties"]["steps"]["items"]["properties"].pop("speech_refs", None)
+    return out
 
 
 def build_prompt(version, manifest, task_hint=""):
@@ -127,13 +165,13 @@ def build_prompt(version, manifest, task_hint=""):
         "Reference only supplied sample IDs whose sample_time_ms falls inside that step's [start_ms,end_ms). "
         "Use explicit uncertainty in the five strings when evidence is unclear. Do not invent steps. "
         "Use conservative visual part names when ambiguous (for example, small round part); "
-        + ("do not assume a small round part is a nut. " if version in ("v2", "v3", "v4", "v5")
+        + ("do not assume a small round part is a nut. " if version in ("v2", "v3", "v4", "v5", "v6", "v6-speech", "v7", "v8")
            else "do not assume a washer is a nut. ")
         + "Time intervals are approximate observation windows, not proof of exact completion. "
         "The done field must state a visible completion criterion and say unverified when completion is not shown. "
         "Keep concept strings concise and group continuous motions into meaningful steps. "
     )
-    if version in ("v2", "v3", "v4", "v5"):
+    if version in ("v2", "v3", "v4", "v5", "v6", "v6-speech", "v7", "v8"):
         prompt += (
             "Cut a new step whenever the gripper opens or closes, or an object leaves or arrives at a place; "
             "one grasp and one place each count as one step; entry and exit may merge into adjacent steps. "
@@ -145,25 +183,62 @@ def build_prompt(version, manifest, task_hint=""):
             "a fastening action; say unverified when completion is not shown. "
             "Write done as only the end state visible on screen; do not add conditions that cannot be seen. "
         )
-    if version == "v3":
+    if version in ("v3", "v7"):
         prompt += (
             "When quoting on-screen text, copy only words that appear verbatim on screen; "
             "if text is unclear write unreadable; never guess synonyms or paraphrases for UI labels. "
         )
-    if version in ("v4", "v5"):
+    if version in ("v4", "v5", "v6", "v6-speech", "v7", "v8"):
         prompt += (
             "Each click and each visible state flip is its own step; never merge two actions "
             "that move in opposite directions (for example check then uncheck, open then close) "
             "into one step. "
         )
-    if version == "v5":
+    if version in ("v5", "v6", "v6-speech", "v7", "v8"):
         prompt += (
             "Step boundaries must be exact multiples of 1000 ms (0, 1000, 2000, ...); "
             "never use values like 3601 or 6999. "
         )
+    if version in ("v6", "v6-speech", "v7", "v8"):
+        prompt += (
+            "First decide video_kind: procedural (someone doing a task step by step), "
+            "non_procedural (scenery, talking head, music, gameplay, anything without a task), "
+            "or uncertain. Write kind_reason (one sentence) and kind_evidence (up to three "
+            "things you see). If non_procedural, return steps as an empty array; never invent "
+            "steps. If only part of the video shows the task, split only that part and report "
+            "proc_start_ms and proc_end_ms; otherwise set them to 0 and the source duration. "
+            "If uncertain, still split steps. "
+        )
+    if version in ("v6", "v7", "v8"):
+        prompt += (
+            "Ignore the audio track; always return speech with status none and an empty "
+            "turns array, and leave speech_refs empty. "
+        )
+    if version == "v6-speech":
+        prompt += (
+            "Also listen to the embedded audio and always return a speech object: status present "
+            "with turn-level turns (start_ms, end_ms, text) when speech is heard, or status none "
+            "with an empty turns array for music, noise, or silence. Steps may cite turn indexes in speech_refs alongside "
+            "frame evidence. Speech only names objects, states intent, or locates cuts; a step "
+            "stands and done holds only on visible evidence; when speech conflicts with video, "
+            "follow the video and write needs_review in evidence. "
+        )
     hint = sanitize_hint(task_hint)
     if hint:
         prompt += f"Operator-provided task hint, naming help only, verify against the video: {hint}. "
+        if version == "v7":
+            prompt += ("Use hint words only when found on screen, copied verbatim; "
+                       "never copy hint words into the answer unseen. ")
+    if manifest.get("keyframes"):
+        prompt += ("Full-resolution keyframe images follow the video, each labeled "
+                   "with its kf id and t= seconds. Read on-screen text from these images, "
+                   "not from the compressed video; cite the kf id and t= in evidence "
+                   "for every quoted word. ")
+    if version == "v8" and manifest.get("desc_table"):
+        prompt += ("A frame description table from a first pass follows. Quote on-screen "
+                   "text ONLY from this table, verbatim; if a word is not in the table, "
+                   "write unreadable instead of guessing. Table: "
+                   + json.dumps(manifest["desc_table"], ensure_ascii=False) + " ")
     prompt += (
         "Return schema_version=1.0 and copy this source unchanged: "
         + json.dumps(manifest["source"], ensure_ascii=False)
@@ -174,7 +249,8 @@ def build_prompt(version, manifest, task_hint=""):
 
 
 class MetaProvider:
-    def __init__(self, model="muse-spark-1.2", confirm_paid=False, prompt_version="v5", task_hint=""):
+    def __init__(self, model="muse-spark-1.2", confirm_paid=False, prompt_version="v6", task_hint="",
+                 keyframes=False, keyframe_dir=None):
         if model not in ("muse-spark-1.2", "muse-spark-1.3"):
             raise AppError("Unsupported model.")
         if not confirm_paid:
@@ -184,6 +260,84 @@ class MetaProvider:
         self.model = model
         self.prompt_version = prompt_version
         self.task_hint = sanitize_hint(task_hint)
+        self.keyframes = bool(keyframes)
+        self.keyframe_dir = Path(keyframe_dir) if keyframe_dir else None
+
+    def _upload_keyframes(self, client, headers, manifest, diagnostics):
+        if self.keyframe_dir is None or not manifest.get("keyframes"):
+            raise AppError("Keyframes requested but none extracted.")
+        out = []
+        for kf in manifest["keyframes"]:
+            path = self.keyframe_dir / kf["file"]
+            if not path.is_file() or sha256(path) != kf["image_sha256"]:
+                raise AppError("A keyframe image is missing or changed.")
+            with path.open("rb") as image:
+                upload = client.post("https://api.meta.ai/v1/files", headers=headers,
+                                     data={"purpose": "user_data"},
+                                     files={"file": (path.name, image, "image/jpeg")})
+            if not upload.is_success:
+                raise AppError(f"Meta keyframe upload HTTP {upload.status_code}; no response request made.")
+            body = upload.json()
+            file_id = body.get("id") if isinstance(body, dict) else None
+            if not isinstance(file_id, str) or not file_id:
+                raise AppError("Meta keyframe upload succeeded without a file id.")
+            secs = round(kf["sample_time_ms"] / 1000, 2)
+            out.append((file_id, f"Keyframe {kf['id']} at t={secs}s (full resolution, read text from here)."))
+        diagnostics["keyframe_images"] = len(out)
+        return out
+
+    def describe(self, manifest, desc_schema):
+        """First pass of (b): images only, no video. Returns (table, metadata)."""
+        try:
+            key = os.environ["META_API_KEY"]
+        except KeyError:
+            raise AppError("META_API_KEY is not configured; no paid call made.") from None
+        if not key.strip():
+            raise AppError("META_API_KEY is empty; no paid call made.")
+        if self.keyframe_dir is None or not manifest.get("keyframes"):
+            raise AppError("Describe requested but no keyframes extracted.")
+        prompt = build_desc_prompt(manifest)
+        previous_logging = logging.root.manager.disable
+        logging.disable(logging.CRITICAL)
+        diagnostics = {"provider": "meta", "mock": False, "model": self.model,
+                       "pass": "describe", "prompt_version": self.prompt_version}
+        try:
+            with httpx.Client(timeout=120, follow_redirects=False, trust_env=False) as client:
+                headers = {"Authorization": f"Bearer {key}"}
+                kf_ids = self._upload_keyframes(client, headers, manifest, diagnostics)
+                content = [{"type": "input_text", "text": prompt}]
+                for kf_id, label in kf_ids:
+                    content.append({"type": "input_text", "text": label})
+                    content.append({"type": "input_image", "file_id": kf_id})
+                schema = copy.deepcopy(desc_schema)
+                schema["required"] = list(schema["properties"])
+                item = schema["properties"]["frames"]["items"]
+                item["required"] = list(item["properties"])
+                response = client.post("https://api.meta.ai/v1/responses", headers=headers, json={
+                    "model": self.model, "input": [{"type": "message", "role": "user", "content": content}],
+                    "text": {"format": {"type": "json_schema", "name": "frame_descriptions",
+                                        "schema": schema, "strict": True}},
+                    "max_output_tokens": 8000, "stream": False, "reasoning": {"effort": "low"},
+                })
+                diagnostics["response_http_status"] = response.status_code
+                if not response.is_success:
+                    raise AppError(f"Meta describe HTTP {response.status_code}; no second pass made.")
+                response_body = response.json()
+                diagnostics.update(safe_response_metadata(response_body))
+                document, usage = parse_meta_response(response_body)
+        except AppError as exc:
+            raise AppError(str(exc), details=diagnostics) from None
+        except httpx.TimeoutException:
+            raise AppError("Meta describe timed out; billing/completion unknown. No automatic retry.",
+                           details=diagnostics) from None
+        except Exception:
+            raise AppError("Meta describe failed; remote error details withheld. No automatic retry.",
+                           details=diagnostics) from None
+        finally:
+            logging.disable(previous_logging)
+        return document, {"provider": "meta", "mock": False, "model": self.model, "usage": usage,
+                          "pass": "describe", "prompt_version": self.prompt_version,
+                          "notice": "First pass: keyframe descriptions only; no steps yet."}
 
     def generate(self, video_path, manifest, schema):
         try:
@@ -197,7 +351,7 @@ class MetaProvider:
         prompt = build_prompt(self.prompt_version, manifest, self.task_hint)
         previous_logging = logging.root.manager.disable
         logging.disable(logging.CRITICAL)
-        diagnostics = {"provider": "meta", "mock": False, "model": self.model, "max_output_tokens": 4000, "reasoning_effort": "low",
+        diagnostics = {"provider": "meta", "mock": False, "model": self.model, "max_output_tokens": 8000, "reasoning_effort": "low",
                          "prompt_version": self.prompt_version, "task_hint": self.task_hint or None}
         try:
             # No retries or redirects. Upload the original bytes, preserving audio.
@@ -213,15 +367,32 @@ class MetaProvider:
                 file_id = upload_body.get("id") if isinstance(upload_body, dict) else None
                 if not isinstance(file_id, str) or not file_id:
                     raise AppError("Meta upload succeeded without a file id.")
-                response = client.post("https://api.meta.ai/v1/responses", headers=headers, json={
+                content = [{"type": "input_text", "text": prompt},
+                           {"type": "input_file", "file_id": file_id}]
+                kf_ids = []
+                if self.keyframes:
+                    kf_ids = self._upload_keyframes(client, headers, manifest, diagnostics)
+                    for kf_id, label in kf_ids:
+                        content.append({"type": "input_text", "text": label})
+                        content.append({"type": "input_image", "file_id": kf_id})
+                body = {
                     "model": self.model,
-                    "input": [{"type": "message", "role": "user", "content": [
-                        {"type": "input_text", "text": prompt}, {"type": "input_file", "file_id": file_id},
-                    ]}],
-                    "text": {"format": {"type": "json_schema", "name": "operation_steps", "schema": schema, "strict": True}},
-                    "max_output_tokens": 4000, "stream": False, "reasoning": {"effort": "low"},
-                })
+                    "input": [{"type": "message", "role": "user", "content": content}],
+                    "text": {"format": {"type": "json_schema", "name": "operation_steps",
+                                        "schema": remote_schema_for(schema, self.prompt_version), "strict": True}},
+                    "max_output_tokens": 8000, "stream": False, "reasoning": {"effort": "low"},
+                }
+                response = client.post("https://api.meta.ai/v1/responses", headers=headers, json=body)
                 diagnostics["response_http_status"] = response.status_code
+                if not response.is_success and response.status_code == 400 and kf_ids:
+                    # Mixed video+images rejected: fall back to images only, once.
+                    diagnostics["mixed_400_fallback"] = True
+                    images_only = [c for c in content if c.get("type") != "input_file"]
+                    images_only.insert(1, {"type": "input_text",
+                                           "text": "Video unavailable; use the t= timestamps on the images for time."})
+                    body["input"][0]["content"] = images_only
+                    response = client.post("https://api.meta.ai/v1/responses", headers=headers, json=body)
+                    diagnostics["response_http_status"] = response.status_code
                 if not response.is_success:
                     raise AppError(f"Meta responses HTTP {response.status_code}; no task exported.")
                 response_body = response.json()
@@ -238,6 +409,6 @@ class MetaProvider:
         return document, {"provider": "meta", "mock": False, "model": self.model, "usage": usage,
                           "upload_http_status": upload.status_code, "response_http_status": response.status_code,
                           "response_status": response_body["status"],
-                          "reasoning_effort": "low", "max_output_tokens": 4000,
+                          "reasoning_effort": "low", "max_output_tokens": 8000,
                           "prompt_version": self.prompt_version, "task_hint": self.task_hint or None,
                           "notice": "Original MP4 uploaded with audio intact when present; human review required."}

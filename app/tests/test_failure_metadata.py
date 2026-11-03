@@ -40,7 +40,8 @@ class FailureMetadataTest(unittest.TestCase):
                 return httpx.Response(200, json=incomplete)
             real_client = httpx.Client
             args = parser().parse_args([str(video), "--provider", "meta", "--confirm-paid-api",
-                                       "--workspace-path", str(APP_DIR), "--out", str(out)])
+                                       "--workspace-path", str(APP_DIR), "--out", str(out),
+                                       "--no-keyframes"])
             with patch("cli.extract", return_value=manifest), patch.dict(os.environ, {"META_API_KEY": "fake-unit-key"}), patch(
                 "providers.httpx.Client", side_effect=lambda **kw: real_client(transport=httpx.MockTransport(handle), **kw)
             ):
