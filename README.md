@@ -60,6 +60,18 @@ from your own env file (never commit it). Details in `app/README.md`.
   credit Jukka Lehtiniemi, Markus Hannula; excerpts only, no speed claims.
 - Category 4: self-recorded screen demo, no third-party license involved.
 
+## Execution attribution
+
+- Model inference: 100% Meta Muse Spark via api.meta.ai. One MiniMax video
+  read was made during development, discarded, and never entered any GT,
+  score, product, or deliverable.
+- Produced by Muse Code: M1 checklist + execution report, bridge design,
+  demo storyboard, recording script, this repo's staging and top docs, repo
+  creation, the M1 dismantle re-run, and all independent acceptance checks.
+- Executed in Codex panes (pre-handover and crew work): app CLI skeleton and
+  tests, all data-collection runs and scoring reports, materials survey, and
+  Navide plan operations.
+
 ## License
 
 MIT — see `LICENSE`.
