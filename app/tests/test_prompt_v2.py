@@ -51,18 +51,35 @@ class PromptV2Tests(unittest.TestCase):
 
     def test_bad_version_rejected(self):
         with self.assertRaises(AppError):
-            build_prompt("v3", MANIFEST)
+            build_prompt("v6", MANIFEST)
         with self.assertRaises(AppError):
-            MetaProvider("muse-spark-1.2", True, "v3")
+            MetaProvider("muse-spark-1.2", True, "v6")
 
-    def test_meta_provider_defaults_v2_no_hint(self):
+    def test_v3_extends_v2_with_verbatim_text_rule(self):
+        v2 = build_prompt("v2", MANIFEST)
+        v3 = build_prompt("v3", MANIFEST)
+        self.assertTrue(v3.startswith(v2.split("Return schema_version")[0]))
+        self.assertIn("never guess synonyms or paraphrases for UI labels", v3)
+        self.assertNotIn("never guess synonyms", v2)
+        low = v3.lower()
+        for word in ("washer", "shaft", "0001_task", "aist"):
+            self.assertNotIn(word, low)
+
+    def test_v4_has_no_merge_rule_without_d_rule(self):
+        v4 = build_prompt("v4", MANIFEST)
+        self.assertIn("never merge two actions", v4)
+        self.assertIn("check then uncheck", v4)
+        self.assertNotIn("never guess synonyms", v4)
+        self.assertIn("gripper opens or closes", v4)
+
+    def test_meta_provider_defaults_v5_no_hint(self):
         m = MetaProvider("muse-spark-1.2", True)
-        self.assertEqual(m.prompt_version, "v2")
+        self.assertEqual(m.prompt_version, "v5")
         self.assertEqual(m.task_hint, "")
 
     def test_cli_prompt_args_default_and_parse(self):
         args = parser().parse_args(["v.mp4", "--workspace-path", "/tmp/ws"])
-        self.assertEqual(args.prompt_version, "v2")
+        self.assertEqual(args.prompt_version, "v5")
         self.assertEqual(args.task_hint, "")
         args = parser().parse_args(["v.mp4", "--workspace-path", "/tmp/ws",
                                     "--prompt-version", "v1", "--task-hint", "washers"])

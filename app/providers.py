@@ -109,7 +109,7 @@ def parse_meta_response(body):
     return document, saved_usage
 
 
-PROMPT_VERSIONS = ("v1", "v2")
+PROMPT_VERSIONS = ("v1", "v2", "v3", "v4", "v5")
 
 
 def sanitize_hint(task_hint):
@@ -127,13 +127,13 @@ def build_prompt(version, manifest, task_hint=""):
         "Reference only supplied sample IDs whose sample_time_ms falls inside that step's [start_ms,end_ms). "
         "Use explicit uncertainty in the five strings when evidence is unclear. Do not invent steps. "
         "Use conservative visual part names when ambiguous (for example, small round part); "
-        + ("do not assume a small round part is a nut. " if version == "v2"
+        + ("do not assume a small round part is a nut. " if version in ("v2", "v3", "v4", "v5")
            else "do not assume a washer is a nut. ")
         + "Time intervals are approximate observation windows, not proof of exact completion. "
         "The done field must state a visible completion criterion and say unverified when completion is not shown. "
         "Keep concept strings concise and group continuous motions into meaningful steps. "
     )
-    if version == "v2":
+    if version in ("v2", "v3", "v4", "v5"):
         prompt += (
             "Cut a new step whenever the gripper opens or closes, or an object leaves or arrives at a place; "
             "one grasp and one place each count as one step; entry and exit may merge into adjacent steps. "
@@ -144,6 +144,22 @@ def build_prompt(version, manifest, task_hint=""):
             "target with gripper open); never write tightening, locking, or securing unless the video shows "
             "a fastening action; say unverified when completion is not shown. "
             "Write done as only the end state visible on screen; do not add conditions that cannot be seen. "
+        )
+    if version == "v3":
+        prompt += (
+            "When quoting on-screen text, copy only words that appear verbatim on screen; "
+            "if text is unclear write unreadable; never guess synonyms or paraphrases for UI labels. "
+        )
+    if version in ("v4", "v5"):
+        prompt += (
+            "Each click and each visible state flip is its own step; never merge two actions "
+            "that move in opposite directions (for example check then uncheck, open then close) "
+            "into one step. "
+        )
+    if version == "v5":
+        prompt += (
+            "Step boundaries must be exact multiples of 1000 ms (0, 1000, 2000, ...); "
+            "never use values like 3601 or 6999. "
         )
     hint = sanitize_hint(task_hint)
     if hint:
@@ -158,7 +174,7 @@ def build_prompt(version, manifest, task_hint=""):
 
 
 class MetaProvider:
-    def __init__(self, model="muse-spark-1.2", confirm_paid=False, prompt_version="v2", task_hint=""):
+    def __init__(self, model="muse-spark-1.2", confirm_paid=False, prompt_version="v5", task_hint=""):
         if model not in ("muse-spark-1.2", "muse-spark-1.3"):
             raise AppError("Unsupported model.")
         if not confirm_paid:

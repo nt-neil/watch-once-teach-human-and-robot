@@ -176,7 +176,7 @@ samples in `app/export/samples/`.
   never been live-verified. Observed API spend ≈ US$0.22 + US$0.60 reserves
   as of 2026-11-03 (usage-rate estimates, not bill reconciliation).
 - Web UI + export + MCP test evidence: backend 75 pass, live e2e 19/19,
-  unit suite 91/91, sha256 zero unexpected drift, 13 design-review rounds +
+  unit suite 93/93, sha256 zero unexpected drift, 13 design-review rounds +
   real-browser walkthroughs (two paid Meta UI runs).
 - Raw evidence: `app/evidence/` — 5 runs (real-smoke 10/30 v1, checklist loop
   v1, M1 re-run v1, UI live run v1, UI live run v2) with operations/manual

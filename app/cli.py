@@ -89,7 +89,7 @@ def parser():
     result.add_argument("--provider", choices=("mock", "meta"), default="mock")
     result.add_argument("--model", choices=("muse-spark-1.2", "muse-spark-1.3"), default="muse-spark-1.2")
     result.add_argument("--confirm-paid-api", action="store_true", help="Explicitly permit a paid original-MP4 upload and inference")
-    result.add_argument("--prompt-version", choices=("v1", "v2"), default="v2")
+    result.add_argument("--prompt-version", choices=("v1", "v2", "v3", "v4", "v5"), default="v5")
     result.add_argument("--task-hint", default="", help="Short operator hint, naming help only (<=200 chars)")
     result.add_argument("--mock-response", help='JSON fixture with only {"steps": [...]}')
     result.add_argument("--sample-interval-ms", type=int, default=1000)
