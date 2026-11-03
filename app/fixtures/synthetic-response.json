@@ -1,0 +1,30 @@
+{
+  "steps": [
+    {
+      "id": "observe",
+      "start_ms": 0,
+      "end_ms": 1000,
+      "concept": {
+        "object": "MOCK：自製測試色卡",
+        "action": "觀察色卡",
+        "target": "影片開頭",
+        "pre": "已播放自製 synthetic fixture；這是手寫範例，不是辨識結果",
+        "done": "人已查看第一張色卡"
+      },
+      "source_frame_refs": ["frame-000001"]
+    },
+    {
+      "id": "compare",
+      "start_ms": 1000,
+      "end_ms": 3000,
+      "concept": {
+        "object": "MOCK：自製測試色卡",
+        "action": "比對後段畫面",
+        "target": "第二秒色卡",
+        "pre": "已查看第一張色卡",
+        "done": "人已比對兩張圖；未驗證任何真實操作"
+      },
+      "source_frame_refs": ["frame-000003"]
+    }
+  ]
+}

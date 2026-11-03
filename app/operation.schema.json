@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Operation steps skeleton contract v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "source", "steps"],
+  "properties": {
+    "schema_version": {"type": "string", "enum": ["1.0"]},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["video_sha256", "video_name", "duration_ms", "provider", "mock", "frame_manifest"],
+      "properties": {
+        "video_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "video_name": {"type": "string", "minLength": 1},
+        "duration_ms": {"type": "number", "exclusiveMinimum": 0, "maximum": 60000},
+        "provider": {"type": "string", "enum": ["mock", "meta"]},
+        "mock": {"type": "boolean"},
+        "frame_manifest": {"type": "string", "enum": ["frames.json"]}
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "start_ms", "end_ms", "concept", "source_frame_refs"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-zA-Z0-9_-]+$"},
+          "start_ms": {"type": "integer", "minimum": 0},
+          "end_ms": {"type": "integer", "minimum": 1},
+          "concept": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["object", "action", "target", "pre", "done"],
+            "properties": {
+              "object": {"type": "string", "minLength": 1},
+              "action": {"type": "string", "minLength": 1},
+              "target": {"type": "string", "minLength": 1},
+              "pre": {"type": "string", "minLength": 1},
+              "done": {"type": "string", "minLength": 1}
+            }
+          },
+          "source_frame_refs": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "pattern": "^frame-[0-9]{6}$"}
+          }
+        }
+      }
+    }
+  }
+}

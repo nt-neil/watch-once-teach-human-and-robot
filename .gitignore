@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+*.mp4
+*.mov
+runs/
+server-state.json
+*.log
+.DS_Store
