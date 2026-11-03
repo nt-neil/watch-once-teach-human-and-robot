@@ -308,6 +308,34 @@ irrelevant log line
             prov._upload_keyframes(None, {}, manifest, {})
         self.assertIn("none extracted", str(cm.exception))
 
+    def test_diff_keyframes_catch_scene_cuts_between_uniform_samples(self):
+        import shutil
+        import subprocess
+        from video import extract_keyframes
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("ffmpeg not present")
+        clip = self.base / "cut.mp4"
+        # 6s clip: red 0-2s, blue 2-4s, red 4-6s. Uniform 3s sampling hits
+        # ~0/3s only; diff mode must also catch the cuts at ~2s and ~4s.
+        cmd = ["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i",
+               "color=red:size=160x120:rate=10:duration=2", "-f", "lavfi", "-i",
+               "color=blue:size=160x120:rate=10:duration=2", "-f", "lavfi", "-i",
+               "color=red:size=160x120:rate=10:duration=2", "-filter_complex",
+               "[0][1][2]concat=n=3:v=1:a=0", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+               str(clip)]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
+        self.assertEqual(r.returncode, 0, r.stderr[:200])
+        manifest = {"timeline_origin_ms": 0, "video_stream_index": 0,
+                    "source": {"duration_ms": 6000}}
+        (self.base / "u").mkdir()
+        (self.base / "d").mkdir()
+        uni = extract_keyframes(clip, self.base / "u", manifest, interval_ms=3000)
+        diff = extract_keyframes(clip, self.base / "d", manifest, interval_ms=3000, mode="diff")
+        times = [k["sample_time_ms"] for k in diff]
+        self.assertTrue(any(1500 < t < 2500 for t in times), times)
+        self.assertTrue(any(3500 < t < 4500 for t in times), times)
+        self.assertGreater(len(diff), len(uni))
+
     def test_describe_sends_images_only(self):
         manifest, _ = self.fixture(self.base)
         kf_path = self.base / "kf-000001.jpg"

@@ -6,6 +6,7 @@ Usage: python3 scripts/eval.py --run runs/<id> --gt eval/gt/m1.json
 """
 import argparse
 import json
+import re
 import statistics
 import sys
 from pathlib import Path
@@ -46,21 +47,23 @@ def gt_steps_of(gt):
             for e in gt.get("events", [])]
 
 
-def match_events(steps, gt_steps):
-    """Greedy in-order matching. A step hits a GT event when intervals overlap
-    (point events: step covers the point) and step start is within tolerance
-    of GT start."""
+def match_events(steps, gt_steps, tol_ms=TOL_MS):
+    """Greedy in-order matching. Interval GTs hit when intervals overlap and
+    step start is within tolerance of GT start. Point-like GTs (width
+    < 100ms, incl. frozen 34ms windows) hit on symmetric start error
+    |start - t| <= tol, without requiring overlap (Fable A1)."""
     hits, used = {}, set()
     for g in gt_steps:
         gmid = (g["start_ms"] + g["end_ms"]) / 2
+        point_like = (g["end_ms"] - g["start_ms"]) < 100
         best, best_err = None, None
         for i, s in enumerate(steps):
             if i in used:
                 continue
-            if not (s["start_ms"] <= g["end_ms"] and g["start_ms"] < s["end_ms"]):
+            if not point_like and not (s["start_ms"] <= g["end_ms"] and g["start_ms"] < s["end_ms"]):
                 continue
             err = abs(s["start_ms"] - g["start_ms"])
-            if err <= TOL_MS and (best_err is None or err < best_err):
+            if err <= tol_ms and (best_err is None or err < best_err):
                 best, best_err = i, err
         if best is not None:
             used.add(best)
@@ -104,12 +107,25 @@ def main():
     gt = json.loads(Path(args.gt).read_text())
     steps = ops.get("steps", [])
     gt_steps = gt_steps_of(gt)
-    hits, merges, splits = match_events(steps, gt_steps)
-    text = json.dumps(ops, ensure_ascii=False).lower()
+    tol_ms = int(gt.get("tolerance_ms", TOL_MS))
+    hits, merges, splits = match_events(steps, gt_steps, tol_ms)
+    # Keyword/hallucination matching excludes the source block: video file
+    # names (wok-dev.mp4, chicken-rice.mp4) must not score free hits (Fable A6).
+    ops_text = {k: v for k, v in ops.items() if k != "source"}
+    text = json.dumps(ops_text, ensure_ascii=False).lower()
+
+    def _word_hit(word):
+        # Word-boundary match (plural -s allowed): "nut" must not match
+        # "minute", "locking" must not match "blocking" (Fable A6).
+        # CJK words have no boundaries; fall back to substring.
+        w = word.lower()
+        if re.search(r"[\u4e00-\u9fff]", w):
+            return w in text
+        return re.search(r"\b" + re.escape(w) + r"s?\b", text) is not None
     kw_list = gt.get("keywords") or (KEYWORDS[args.kind] if args.kind else [])
     hw_list = gt.get("hallucination_words") or (HALLUCINATION_WORDS[args.kind] if args.kind else [])
-    keywords = {k: (k.lower() in text) for k in kw_list}
-    hallucinations = sorted({w for w in hw_list if w.lower() in text})
+    keywords = {k: _word_hit(k) for k in kw_list}
+    hallucinations = sorted({w for w in hw_list if _word_hit(w)})
     kind_pred = ops.get("video_kind", "procedural")
     kind_gt = gt.get("video_kind", "procedural")
     kind_ok = kind_pred == kind_gt
@@ -158,6 +174,7 @@ def main():
         "video_kind_gt": kind_gt,
         "kind_ok": kind_ok,
         "median_err_ms": median_err,
+        "tolerance_ms": tol_ms,
         "passed": passed,
         "pass_rule_verdict": verdict,
         "cost_usd": cost,

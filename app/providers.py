@@ -12,6 +12,16 @@ import httpx
 from common import AppError, read_json, sha256
 
 
+def trust_proxy_env():
+    """True only when the operator explicitly opts into env proxies.
+
+    Default False: API calls (which carry the key) must not follow proxy
+    env vars or ~/.netrc silently. Sandboxed eval harnesses that cannot
+    reach api.meta.ai directly set META_TRUST_PROXY=1 for transport only.
+    """
+    return os.environ.get("META_TRUST_PROXY", "").strip() == "1"
+
+
 class MockProvider:
     def __init__(self, response_path):
         self.response_path = Path(response_path)
@@ -109,7 +119,7 @@ def parse_meta_response(body):
     return document, saved_usage
 
 
-PROMPT_VERSIONS = ("v1", "v2", "v3", "v4", "v5", "v6", "v6-speech", "v7", "v8")
+PROMPT_VERSIONS = ("v1", "v2", "v3", "v4", "v5", "v6", "v6-speech", "v7", "v8", "v9")
 
 
 def sanitize_hint(task_hint):
@@ -139,7 +149,7 @@ def remote_schema_for(schema, version):
     """
     out = copy.deepcopy(schema)
     props = out["properties"]
-    if version in ("v6", "v6-speech", "v7", "v8"):
+    if version in ("v6", "v6-speech", "v7", "v8", "v9"):
         out["required"] = list(props)
         for step in [out["properties"]["steps"]["items"]]:
             step["required"] = list(step["properties"])
@@ -157,7 +167,17 @@ def remote_schema_for(schema, version):
 def build_prompt(version, manifest, task_hint=""):
     if version not in PROMPT_VERSIONS:
         raise AppError("Unsupported prompt version.")
-    prompt = (
+    prompt = ""
+    if version == "v9":
+        prompt += (
+            "This clip is a magnified time window cut from a longer video to settle "
+            "disputed boundaries. List ONLY the visible action transitions inside "
+            "this window as steps; do not judge the whole task and do not invent "
+            "steps outside the window. All millisecond times are relative to THIS "
+            "clip (0 is the window start). Prefer splitting over merging: when two "
+            "motions look similar, cut between them if anything visible changes. "
+        )
+    prompt += (
         "Read the attached ORIGINAL MP4, including its audio when present. Produce a human-reviewable "
         "operation sequence based only on visible/audible evidence. Do not claim SAM tracking. "
         "Each concept has exactly the five string fields object/action/target/pre/done. "
@@ -165,13 +185,13 @@ def build_prompt(version, manifest, task_hint=""):
         "Reference only supplied sample IDs whose sample_time_ms falls inside that step's [start_ms,end_ms). "
         "Use explicit uncertainty in the five strings when evidence is unclear. Do not invent steps. "
         "Use conservative visual part names when ambiguous (for example, small round part); "
-        + ("do not assume a small round part is a nut. " if version in ("v2", "v3", "v4", "v5", "v6", "v6-speech", "v7", "v8")
+        + ("do not assume a small round part is a nut. " if version in ("v2", "v3", "v4", "v5", "v6", "v6-speech", "v7", "v8", "v9")
            else "do not assume a washer is a nut. ")
         + "Time intervals are approximate observation windows, not proof of exact completion. "
         "The done field must state a visible completion criterion and say unverified when completion is not shown. "
         "Keep concept strings concise and group continuous motions into meaningful steps. "
     )
-    if version in ("v2", "v3", "v4", "v5", "v6", "v6-speech", "v7", "v8"):
+    if version in ("v2", "v3", "v4", "v5", "v6", "v6-speech", "v7", "v8", "v9"):
         prompt += (
             "Cut a new step whenever the gripper opens or closes, or an object leaves or arrives at a place; "
             "one grasp and one place each count as one step; entry and exit may merge into adjacent steps. "
@@ -188,18 +208,18 @@ def build_prompt(version, manifest, task_hint=""):
             "When quoting on-screen text, copy only words that appear verbatim on screen; "
             "if text is unclear write unreadable; never guess synonyms or paraphrases for UI labels. "
         )
-    if version in ("v4", "v5", "v6", "v6-speech", "v7", "v8"):
+    if version in ("v4", "v5", "v6", "v6-speech", "v7", "v8", "v9"):
         prompt += (
             "Each click and each visible state flip is its own step; never merge two actions "
             "that move in opposite directions (for example check then uncheck, open then close) "
             "into one step. "
         )
-    if version in ("v5", "v6", "v6-speech", "v7", "v8"):
+    if version in ("v5", "v6", "v6-speech", "v7", "v8", "v9"):
         prompt += (
             "Step boundaries must be exact multiples of 1000 ms (0, 1000, 2000, ...); "
             "never use values like 3601 or 6999. "
         )
-    if version in ("v6", "v6-speech", "v7", "v8"):
+    if version in ("v6", "v6-speech", "v7", "v8", "v9"):
         prompt += (
             "First decide video_kind: procedural (someone doing a task step by step), "
             "non_procedural (scenery, talking head, music, gameplay, anything without a task), "
@@ -209,7 +229,7 @@ def build_prompt(version, manifest, task_hint=""):
             "proc_start_ms and proc_end_ms; otherwise set them to 0 and the source duration. "
             "If uncertain, still split steps. "
         )
-    if version in ("v6", "v7", "v8"):
+    if version in ("v6", "v7", "v8", "v9"):
         prompt += (
             "Ignore the audio track; always return speech with status none and an empty "
             "turns array, and leave speech_refs empty. "
@@ -250,7 +270,7 @@ def build_prompt(version, manifest, task_hint=""):
 
 class MetaProvider:
     def __init__(self, model="muse-spark-1.2", confirm_paid=False, prompt_version="v6", task_hint="",
-                 keyframes=False, keyframe_dir=None):
+                 keyframes=False, keyframe_dir=None, temperature=None):
         if model not in ("muse-spark-1.2", "muse-spark-1.3"):
             raise AppError("Unsupported model.")
         if not confirm_paid:
@@ -262,6 +282,7 @@ class MetaProvider:
         self.task_hint = sanitize_hint(task_hint)
         self.keyframes = bool(keyframes)
         self.keyframe_dir = Path(keyframe_dir) if keyframe_dir else None
+        self.temperature = temperature
 
     def _upload_keyframes(self, client, headers, manifest, diagnostics):
         if self.keyframe_dir is None or not manifest.get("keyframes"):
@@ -302,7 +323,7 @@ class MetaProvider:
         diagnostics = {"provider": "meta", "mock": False, "model": self.model,
                        "pass": "describe", "prompt_version": self.prompt_version}
         try:
-            with httpx.Client(timeout=120, follow_redirects=False, trust_env=False) as client:
+            with httpx.Client(timeout=120, follow_redirects=False, trust_env=trust_proxy_env()) as client:
                 headers = {"Authorization": f"Bearer {key}"}
                 kf_ids = self._upload_keyframes(client, headers, manifest, diagnostics)
                 content = [{"type": "input_text", "text": prompt}]
@@ -355,7 +376,7 @@ class MetaProvider:
                          "prompt_version": self.prompt_version, "task_hint": self.task_hint or None}
         try:
             # No retries or redirects. Upload the original bytes, preserving audio.
-            with httpx.Client(timeout=120, follow_redirects=False, trust_env=False) as client:
+            with httpx.Client(timeout=120, follow_redirects=False, trust_env=trust_proxy_env()) as client:
                 headers = {"Authorization": f"Bearer {key}"}
                 with Path(video_path).open("rb") as video:
                     upload = client.post("https://api.meta.ai/v1/files", headers=headers,
@@ -382,6 +403,8 @@ class MetaProvider:
                                         "schema": remote_schema_for(schema, self.prompt_version), "strict": True}},
                     "max_output_tokens": 8000, "stream": False, "reasoning": {"effort": "low"},
                 }
+                if self.temperature is not None:
+                    body["temperature"] = self.temperature
                 response = client.post("https://api.meta.ai/v1/responses", headers=headers, json=body)
                 diagnostics["response_http_status"] = response.status_code
                 if not response.is_success and response.status_code == 400 and kf_ids:

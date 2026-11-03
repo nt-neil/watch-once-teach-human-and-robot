@@ -179,6 +179,117 @@ Voted (evote): m1 4/4 PASS, l3 4/4 PASS, w1 0/4 FAIL, obs 3/7 FAIL, s003 2/2 PAS
 - M1 web-20261103T145138Z: 4 steps, cuts 0/4/7/10s.
 - Neither run triggered repair_frame_refs; both exported clean. Paid by operator budget (not counted in iteration cumulative).
 
+## R8 (v6+kf baseline on new dev D9-D12, n=1)
+
+- phab-ui eval-r8-phab-ui: 7 steps, 4/10 hits at ±2s tolerance (2/10 at ±1s), merges 2, kw 3/3, halluc 0 → FAIL (browsing actions too fine-grained; same family as ui-a misses).
+- wok-dev eval-r8-wok-dev: 2 steps (0-13s one giant toss step + plating), 2/4, merges 1, kw 2/3 → FAIL (continuous stir-fry merged; same family as m1-0008/w1).
+- chicken-rice eval-r8-chicken-rice: 4 steps, 4/4 hits, merges 0, kw 3/3, halluc 0 → PASS (hard cuts help segmentation).
+- alioli: REJECTED by CLI (>60s product limit). Long-clip dev eval needs a 60s-window sub-GT (11/4).
+- Verdict: 1/3 pass. Cuts >> continuous motion for this model. New dev: 12 clips, 9 with GT frozen (alioli sub-window pending).
+- Post-note: eval.py now reads gt.tolerance_ms (default 1000); soft-boundary GTs carry 2000. Rescored phab 4/10, wok/chicken/alioli unchanged.
+- Round spend: 3 paid calls (alioli rejected before upload, $0), est $0.1543 (over $0.12 estimate: phab/chicken outputs long). Cumulative iteration: 102 calls, est $2.2486.
+
+## diff-kf (v6 + --kf-mode diff, OBS validation n=1)
+
+- eval-diff-obs: 12 kf (9 uniform + 5 scene triggers at 8.8/10.4/14.8/18.2/21.4s ≈ GT3-GT7; GT1/GT2 too small to trigger). 5 steps, semantics all correct (type+add/check/uncheck/recheck/clear), kw 4/4, halluc 0 — but 0/7 hits: every step starts 1.4-2.1s early (9000 vs GT 10400 etc.), outside ±1s tolerance.
+- Verdict n=1: diff frames do not fix timing by themselves; early-start bias dominates. Needs n=2,3 to separate bias from noise (11/4). Flag-only, default untouched. Local test: diff catches cuts between uniform samples (synthetic red/blue).
+- Round spend: 1 paid call, est $0.0425. Cumulative iteration: 103 calls, est $2.2911.
+
+## diff-kf n=2,3 (OBS, same setting)
+
+- n2: model emitted 6 steps all with id "source_frame_refs" → structural validation correctly rejected the run (paid, $0.0422 est from usage in 20559/out 4820).
+- n3: 5 steps, 1/7 hits, merges 1, kw 4/4, halluc 0 → FAIL, est $0.0420.
+- Verdict n=3: 0/7, FAIL, 1/7 (mean ~0.3/7) vs uniform v6 ~3-4/7. Scene-triggered frames cluster evidence at cuts but do not improve boundary starts; early-start bias persists. diff-kf NOT adopted for UI clips. Keep flag for cut-heavy clips (chicken-rice family) retest 11/4 if time.
+- Round spend: 2 paid calls, est $0.0842. Cumulative iteration: 105 calls, est $2.3753.
+
+## R8-alioli60 (v6+kf on 0-59.5s window, n=1)
+
+- eval-r8-alioli60: 5 steps, 0/3 hits, merges 0, kw 3/3, halluc 0 → FAIL. Steps misaligned AND mislabeled (garlic read as crack/break egg-like actions; pour split 9-22/22-28s vs GT oil 0-15s, peel 15-45s).
+- Note: 60.066s -c copy cut exceeded the 60s CLI limit; recut to 59.5s re-encode, sub-GT sha updated.
+- Verdict: slow hand actions with soft boundaries fail both timing and labels. Long-clip eval viable via windows; model side needs work (11/4: zoom-prompt retest candidate).
+- Round spend: 1 paid call, est $0.0399. Cumulative iteration: 106 calls, est $2.4152.
+
+## v9 zoom prompt (implemented 11/4 early morning, validation pending)
+
+- v9 = v6 + zoom preamble (magnified window, relative times, prefer splitting). CLI --prompt-version v9, default stays v6. Tests: v9 preamble test + bad-version moved to v10; full suite 115 passed.
+- Plan 11/4: v9 on obs-merge/uib-focus subclips (plain v6 re-ask failed there), then disputed-boundary zoom on wok-dev/m1-0008 merges. Pre-estimate $0.10 for 3 calls.
+- Spend: $0 (no paid calls).
+
+## v9 validation (zoom re-ask, n=1 per subclip)
+
+- obs-merge (0-8.5s): 1 step 0-1000ms (hover only); GT1+GT2 still missed. Same early-attention failure as v6.
+- obs-nr (11-18s): 1 step rel 0-2000ms; GT5 (rel 3.8s) missed. Same failure.
+- uib-focus (0-3.5s): 2 steps 1-2s focus + 2-3s type; GT1 (1638, err 638) + GT2 (2675, err 675) BOTH HIT — first recovery of the stably-missed uib GT1.
+- Verdict: v9 works on very short windows (3.5s ✓) but not 7-8.5s ones (model watches only the first 1-2s). Next: split obs-merge into 0-4/4-8s windows and retest (11/4). All 3 completed (vs v6: 1 uncertain + 2 incomplete) — zoom preamble at least stabilizes output shape.
+- Round spend: 3 paid calls, in 7224 / out 9969, est $0.0521 (under $0.10 estimate). Cumulative iteration: 109 calls, est $2.4673.
+
+## v9 short-window x3 (obs 0-4s + 4-8s, GT1/GT2 recovery)
+
+- 0-4s (GT1 1.4s focus): 2/3 "click to focus" covering GT1 (start 0, err 1400, miss on start rule); 1/3 starts 2000 (miss).
+- 4-8s (GT2 6.3s type): 3/3 "type" covering GT2 (start 4000, err 2300, miss on start rule).
+- Verdict: semantics 5/6 correct — windowing recovers the merged focus/type actions. But every window step starts at the window edge, so strict start-rule scoring still misses; windowed re-ask needs in-window timing (midpoint or vote), not raw starts. Procedure sketch: single pass → windows over merged suspects (>4s UI steps) → v9 split → map back.
+- Round spend: 6 paid calls, in 24381 / out 18322, est $0.1068. Cumulative iteration: 115 calls, est $2.5741.
+
+## vote5 (OBS v6+kf x5 + merge, vs 3-vote)
+
+- Singles: 4/7, 0/7, 3/7, 1/7, 2/7 (mean 2.0, range 0-4). Swing reconfirmed on same setting.
+- vote5 merged: 9 steps, 6 agreed + 3 needs_review, 4/7 hits, merges 1, kw 4/4 → FAIL (same trio missed).
+- Verdict: 5-vote = 4/7, identical to 3-vote 4/7 (n=1 each). Voting lifts mean 2.0 → 4 but 5 votes add 67% cost for no gain over 3. Keep 3-vote as the cost-effective stabilizer.
+- Round spend: 5 paid calls, est $0.2063 (over $0.15 estimate). Cumulative iteration: 120 calls, est $2.7804.
+
+## SAM (concept counting on W1 frames, sam-3.1)
+
+- 'wooden board' on t=5/15/25/35s: 20/23/22/17 matches (workshop background boards all match; no step-correlated trend).
+- 'small wooden piece': 16/13 (still noisy). 'wooden box part': 0/0.
+- Verdict: concept counting unusable on wide workshop shots. Box/point video tracking needs a human initial box — incompatible with the automatic pipeline. SAM dropped for W1; look-alike panels stay a known limit.
+- Spend: 9 SAM calls, usage 0 tokens (images_processed billing unknown, booked $0, disclosed). Cumulative iteration: 120 Spark calls, est $2.7804.
+
+## R9 (v6+kf baseline on D13-D16, n=1)
+
+- m1-0002 eval-r9-m1b: 2 steps, 2/2 hits → PASS ($0.0156). Second robot clip generalizes.
+- taliya eval-r9-taliya: procedural 2 steps on single continuous pressing → pass_rule FAIL ($0.0219). Gate still invents sub-steps on uniform motion (stump passed, taliya fails — same family, split verdict).
+- blacksmith eval-r9-smith: 4 steps, 2/2 hits → PASS ($0.0541). Tool + partial-operation OK.
+- pottery-0-60 eval-r9-pot60: 13 steps, 1/2 → FAIL ($0.0373). Over-splitting on soft phase boundaries.
+- Verdict: 2/4 pass. dev now 16 clips, 13 with frozen GT (pottery full + N1a/N1b/N2 pending). eval.py reads gt.tolerance_ms (soft GTs 2000).
+- Round spend: 4 paid calls, est $0.1289. Cumulative iteration: 124 calls, est $2.9093.
+
+## hybrid (v8 text + v6 time on OBS, manual merge check)
+
+- v8 two-stage: 5 steps, 3/7, kw 4/4, $0.0445 (2 calls). v6 single: 6 steps, 3/7, kw 4/4, $0.0372.
+- Verdict: no merge performed — text is already 4/4 on both (keyframes fixed it in E2''). The hybrid premise (v8 text good, v6 time good) no longer holds; timing is the bottleneck on both. Hybrid dropped.
+- Round spend: 3 paid calls, est $0.0817. Cumulative iteration: 127 calls, est $2.9910.
+
+## f1 (dev-16 full, v6+kf, OLD ruler — rescore pending)
+
+- m1 4/4 PASS; l3 3/4 FAIL; w1 2/4 FAIL; obs 1/7 FAIL; s003 1/2 FAIL (new swing, was 2/2); winter PASS; talk PASS; uib 4/5 PASS; phab 5/10 FAIL; wok 3/4 FAIL; chicken 4/4 PASS; alioli60 0/3 FAIL; m1b 2/2 PASS; taliya FAIL (pass_rule); pot60 1/2 FAIL; smith 2/2 PASS.
+- Verdict (old ruler): 7/16 pass. Scores will change under the symmetric ruler; see rescore section.
+- Round spend: 16 paid calls, in 299275 / out 46728, est $0.5844. Cumulative iteration: 143 calls, est $3.5754.
+
+## Ruler fix + rescore (Fable A1/A2/A3/A6/E2, zero new calls)
+
+Changes: point-like GT (<100ms) scores symmetric |start-t|<=tol without overlap (A1); vote keeps strict majority only, minority to proposal_steps, N-generic bar >N/2 (A2/A3); keywords exclude source block + word boundaries (A6); providers trust_env defaults False with META_TRUST_PROXY=1 opt-in for sandboxed eval (E2). Tests: tests/test_eval_ruler.py 6 tests. Rescore: scripts/rescore.py over runs/eval-* (subclip runs skipped, vote products re-merged to *-maj, originals kept).
+
+Headline numbers (new ruler + true majority):
+- dev vote (evote-maj): m1 4/4 PASS, l3 3/4 FAIL, w1 0/4, obs 4/7 FAIL, s003 2/2, winter PASS, talk PASS, uib 4/5 PASS → 5/8 (was 5/8; member change: l3 drops, nothing added).
+- held vote (heldvote-maj): aalto 2/5, l4 4/4, m1-0008 1/4, postfire PASS, stump PASS, ui-a 6/8, wok 4/4 → 4/7 (was 4/7, same members).
+- vote-obs 4/7→5/7 (still FAIL); vote5-obs 4/7 (still FAIL); f1 7/16 (same count, obs 1/7→2/7).
+- v5obs singles under new ruler: 4/2/6/3/4, mean 3.8 (was 4/0/3/1/2, mean 2.0).
+- e2pp-obs-1 5/7→6/7 PASS; v5obs-3 3/7→6/7 PASS; f-obs-dense 3/7→5/7; f-uib-dense 4/5→5/5 PASS; r7-uib 3/5→4/5.
+- Note on Fable's single-variable predictions (vote5→2/7, ui-a→4/8): those hold the OLD ruler fixed while removing minority steps. This rescore changes both rulers at once; symmetric starts recover GT1/GT7 on majority steps, so vote5 stays 4/7 and ui-a stays 6/8. Both statements are true on their own ruler.
+
+Old conclusions, re-judged:
+- HOLD: w1 systematic fail; wok/m1-0008 merge family; hybrid pointless (text already 4/4); 5-vote no gain over 3-vote (4/7 vs 5/7 under new ruler — actually 3-vote now leads); SAM unusable; repair/honest-boundary work unaffected.
+- REVISED: "voting rescues l3" REJECTED (3/4 true majority = same as singles). "uib GT1 always missed" REJECTED as stated — f-uib-dense now 5/5; residual misses are GT2-type (text onset), not focus. "v9 recovered GT1" DOWNGRADED to ruler-boundary luck (1000ms start). dev/held PASS counts numerically unchanged but rest on different members; README must carry the no-kf + tolerance premises (B4, below).
+- NEW failure list: OBS GT2 (type onset 6.3s), GT6/GT7 timing; W1/aalto/m1-0008 look-alike merges; taliya over-split; pottery over-split; phab browsing granularity.
+- Disclosure (Fable B1): the prompt bans tightening/locking/securing/nut, which is exactly the M1 hallucination wordlist; halluc 0 is partly a vocabulary ban, not proof the model stopped inventing completion. The real guard is the generic rule "done states only the visible end state".
+- Spend: $0. Cumulative iteration: 143 calls, est $3.5754.
+
+## F3-temp0 (OBS v6+kf temperature=0 x3, new ruler)
+
+- t0: 3/7, 4/7, 5/7 (mean 4.0, range 3-5), kw 4/4 all. Default-temp v5obs under new ruler: 4/2/6/3/4 (mean 3.8, range 2-6).
+- Verdict n=3: temperature=0 slightly narrows the range (3-5 vs 2-6) at similar mean. API probe: temperature accepted, seed rejected (400). Flag: --temperature (default None = API default). Needs n=5 + effort-medium contrast for a firm claim (11/4).
+- Round spend: 3 paid calls, est $0.1221 + $0.0001 probe. Cumulative iteration: 146 calls, est $3.6976.
+
 ## (a)-zoomin (v6 plain re-ask on ±2s subclips, obs/uib)
 
 - obs-merge (0-8.5s, covers GT1+GT2): judged UNCERTAIN, 1 step 0-1s (hover, unverified). The 7.5s of typing after it was not seen at all.

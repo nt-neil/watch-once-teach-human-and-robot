@@ -51,9 +51,9 @@ class PromptV2Tests(unittest.TestCase):
 
     def test_bad_version_rejected(self):
         with self.assertRaises(AppError):
-            build_prompt("v9", MANIFEST)
+            build_prompt("v10", MANIFEST)
         with self.assertRaises(AppError):
-            MetaProvider("muse-spark-1.2", True, "v9")
+            MetaProvider("muse-spark-1.2", True, "v10")
 
     def test_v6_extends_v5_with_video_kind_gate(self):
         v5 = build_prompt("v5", MANIFEST)
@@ -79,6 +79,17 @@ class PromptV2Tests(unittest.TestCase):
         self.assertIn("never copy hint words into the answer unseen", hinted)
         self.assertNotIn("never copy hint words",
                          build_prompt("v6", MANIFEST, "washers"))
+
+    def test_v9_adds_zoom_window_preamble_to_v6(self):
+        v6 = build_prompt("v6", MANIFEST)
+        v9 = build_prompt("v9", MANIFEST)
+        self.assertIn("magnified time window", v9)
+        self.assertIn("relative to THIS clip", v9)
+        self.assertIn("Prefer splitting over merging", v9)
+        self.assertNotIn("magnified time window", v6)
+        for chunk in ("gripper opens or closes", "never merge two actions",
+                      "exact multiples of 1000 ms", "First decide video_kind"):
+            self.assertIn(chunk, v9)
 
     def test_v8_appends_desc_table(self):
         table = [{"kf_id": "kf-000001", "t_s": 8.0, "text_seen": ["Buy milk"], "state": "row visible"}]

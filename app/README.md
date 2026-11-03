@@ -246,3 +246,16 @@ python3 -m venv .venv
 ```
 
 Claude Code／Muse Code 設定範（`mcpServers`，路徑換成你的 clone）：見 `mcp.example.json`。Navide：在 pane 內以 stdio 啟動本 server 即可（本專案即以 pane 代送方式運作）。
+
+## W15：泛化迭代（11/3–11/4，最佳組合 v6＋keyframes＋3 票選項）
+
+出貨預設：prompt v6（video_kind 閘門：procedural／non_procedural／uncertain）＋原解析度關鍵幀（`--no-keyframes` 可關）＋可選 3 票多數決（UI 勾選，只留嚴格多數步驟，少數進 proposal_steps 不計分）。
+
+評分（量尺修正後重算：點事件對稱起點、真多數投票、kw 字界；詳 `eval/rounds.md`「量尺修正後重算」）：
+- dev 投票 5/8：m1 4/4、s003 2/2、winter 過、talk 過、uib 4/5；l3 3/4、w1 0/4、obs 4/7 未過。「投票救回 l3」已撤回（真多數下與單次相同）。
+- held-out（評一次）4/7：l4 4/4、wok 4/4、postfire 過、stump 過；m1-0008 1/4、aalto-03 2/5、ui-a 6/8 未過。
+- 前提揭露：以上投票量的都是 v6 不帶關鍵幀的歷史 runs，不是出貨預設；出貨預設尚無 held-out 數字。
+- 幻覺揭露：prompt 禁寫 tightening／locking／securing／nut，正好等於 M1 幻覺詞表；halluc 0 部分靠詞彙禁令，真正的防線是「done 只寫看得到的終態」。
+- 已知限制：細粒度裝配合併、外觀相似板件、UI 短事件時間精度、單一連續動作過拆、5 票無增益、SAM 在廣角工作坊不可用。
+
+介面多語系：預設英文，右上角切換繁中／简中／日本語／Español（靜態 `web/i18n/`，日／西為 machine-assisted）；模型產出原文顯示。

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Majority-vote merge of 3 runs of the same clip. No API calls.
+"""Majority-vote merge of N runs of the same clip. No API calls.
 
 Usage: python3 scripts/vote.py --runs runs/a runs/b runs/c --out runs/voted
-Steps cluster by time overlap; a cluster with >=2 votes is kept with median
-boundaries; concept fields vote per-field; single-vote clusters are kept but
-marked needs_review in evidence.
+Steps cluster by time overlap; only clusters with a strict majority
+(> N/2 distinct runs) are kept, with median boundaries and per-field
+concept vote. Minority clusters are listed under proposal_steps and do
+NOT enter the scored steps (Fable A2/A3).
 """
 import argparse
 import copy
@@ -61,8 +62,10 @@ def merge_runs(run_dirs):
         key=lambda x: x["start_ms"])
     clusters = cluster([{**s["step"], "start_ms": s["start_ms"],
                          "end_ms": s["end_ms"]} for s in steps])
-    merged = []
-    for ci, cl in enumerate(clusters, 1):
+    n = len(docs)
+    bar = n / 2
+    merged, proposals = [], []
+    for cl in clusters:
         voters = set()
         for s in steps:
             if any(iou({"start_ms": s["start_ms"], "end_ms": s["end_ms"]},
@@ -75,27 +78,34 @@ def merge_runs(run_dirs):
             concepts[field] = vote_field([m["concept"][field] for m in cl])
         refs = sorted({r for m in cl for r in m["source_frame_refs"]})
         evidences = sorted({m["evidence"] for m in cl})
-        agreed = len(voters) >= 2
         evidence = evidences[0] if len(evidences) == 1 else "VOTE: " + " | ".join(evidences)
-        if not agreed:
-            evidence = "needs_review (1/3 votes): " + evidence
-        merged.append({"id": f"vote-{ci:02d}", "start_ms": int(statistics.median(starts)),
-                       "end_ms": int(statistics.median(ends)), "concept": concepts,
-                       "source_frame_refs": refs[:4] or cl[0]["source_frame_refs"][:1],
-                       "evidence": evidence})
+        entry = {"start_ms": int(statistics.median(starts)),
+                 "end_ms": int(statistics.median(ends)), "concept": concepts,
+                 "source_frame_refs": refs[:4] or cl[0]["source_frame_refs"][:1],
+                 "evidence": evidence, "votes": f"{len(voters)}/{n}"}
+        if len(voters) > bar:
+            merged.append(entry)
+        else:
+            entry["evidence"] = f"proposal ({len(voters)}/{n} votes): " + evidence
+            proposals.append(entry)
     merged.sort(key=lambda s: (s["start_ms"], s["end_ms"]))
+    for ci, s in enumerate(merged, 1):
+        s["id"] = f"vote-{ci:02d}"
+        del s["votes"]
+    for ci, s in enumerate(proposals, 1):
+        s["id"] = f"prop-{ci:02d}"
     base = copy.deepcopy(docs[0])
     base["video_kind"] = kind
     base["steps"] = merged
-    votes = sum(1 for s in merged if not s["evidence"].startswith("needs_review"))
-    stats = {"n_steps": len(merged), "agreed": votes,
-             "needs_review": len(merged) - votes, "video_kind": kind}
+    base["proposal_steps"] = proposals
+    stats = {"n_runs": n, "n_steps": len(merged), "proposals": len(proposals),
+             "video_kind": kind}
     return base, stats
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--runs", nargs=3, required=True)
+    ap.add_argument("--runs", nargs="+", required=True)
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
     base, stats = merge_runs(args.runs)
@@ -103,8 +113,8 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     (out / "operations.json").write_text(json.dumps(base, ensure_ascii=False, indent=1))
     print(json.dumps(stats))
-    print(f"vote: {stats['n_steps']} steps, {stats['agreed']} agreed, "
-          f"{stats['needs_review']} needs_review, kind={stats['video_kind']}", file=sys.stderr)
+    print(f"vote: {stats['n_steps']} steps from {stats['n_runs']} runs, "
+          f"{stats['proposals']} proposals, kind={stats['video_kind']}", file=sys.stderr)
     return 0
 
 

@@ -45,7 +45,7 @@ def run(args):
     if not Path(args.workspace_path).is_absolute():
         raise AppError("--workspace-path must be an absolute workspace root.")
     provider = (MetaProvider(args.model, args.confirm_paid_api, args.prompt_version, args.task_hint,
-                               keyframes=False) if args.provider == "meta"
+                               keyframes=False, temperature=args.temperature) if args.provider == "meta"
                 else MockProvider(args.mock_response or APP_DIR / "fixtures/synthetic-response.json"))
     if args.provider == "meta" and args.mock_response:
         raise AppError("--mock-response is only valid with --provider mock.")
@@ -64,7 +64,7 @@ def run(args):
             raise AppError("--two-stage is only valid with --provider meta.")
         use_kf = (args.keyframes or args.two_stage) and args.provider == "meta"
         if use_kf:
-            manifest["keyframes"] = extract_keyframes(Path(args.video).resolve(), out, manifest, interval_ms=args.kf_interval_ms, max_frames=50)
+            manifest["keyframes"] = extract_keyframes(Path(args.video).resolve(), out, manifest, interval_ms=args.kf_interval_ms, max_frames=50, mode=args.kf_mode)
             provider.keyframe_dir = out
             provider.keyframes = True
         write_json(out / "frames.json", manifest)
@@ -112,7 +112,7 @@ def parser():
     result.add_argument("--provider", choices=("mock", "meta"), default="mock")
     result.add_argument("--model", choices=("muse-spark-1.2", "muse-spark-1.3"), default="muse-spark-1.2")
     result.add_argument("--confirm-paid-api", action="store_true", help="Explicitly permit a paid original-MP4 upload and inference")
-    result.add_argument("--prompt-version", choices=("v1", "v2", "v3", "v4", "v5", "v6", "v6-speech", "v7", "v8"), default="v6")
+    result.add_argument("--prompt-version", choices=("v1", "v2", "v3", "v4", "v5", "v6", "v6-speech", "v7", "v8", "v9"), default="v6")
     result.add_argument("--task-hint", default="", help="Short operator hint, naming help only (<=200 chars)")
     result.add_argument("--mock-response", help='JSON fixture with only {"steps": [...]}')
     result.add_argument("--sample-interval-ms", type=int, default=1000)
@@ -122,6 +122,8 @@ def parser():
                         help="Also send full-resolution frames as images (default on; --no-keyframes to disable)")
     result.add_argument("--two-stage", action="store_true", help="Describe keyframes first, then segment with the table (b; two paid calls)")
     result.add_argument("--kf-interval-ms", type=int, default=3000, help="Keyframe interval in ms (default 3000; UI dense: 500)")
+    result.add_argument("--kf-mode", choices=("uniform", "diff"), default="uniform", help="Keyframe sampling: uniform only, or uniform plus scene-change triggers (experiment)")
+    result.add_argument("--temperature", type=float, default=None, help="Pass temperature to the model (default None = API default; experiment, e.g. 0)")
     return result
 
 

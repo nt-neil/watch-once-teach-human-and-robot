@@ -15,6 +15,8 @@ if [ -z "${META_API_KEY:-}" ]; then
   echo "ERROR: META_API_KEY is not configured; no paid call made." >&2
   exit 2
 fi
+# Sandbox transport only (see run-dev16.sh). Product default stays off.
+export META_TRUST_PROXY=1
 ROUND="$1"
 VER="$2"
 REPORT_DIR="$APP_DIR/eval/rounds/$ROUND"

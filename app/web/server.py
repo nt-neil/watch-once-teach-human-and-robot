@@ -18,7 +18,7 @@ import time
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlsplit
+from urllib.parse import parse_qs, parse_qsl, unquote, urlsplit
 
 APP_DIR = Path(__file__).resolve().parent.parent
 WEB_DIR = Path(__file__).resolve().parent
@@ -84,6 +84,71 @@ EXAMPLES = {
 
 
 _CSRF_TOKEN = secrets.token_urlsafe(32)
+
+LANGS = (("en", "English"), ("zh-Hant", "繁體中文"), ("zh-Hans", "简体中文"),
+         ("ja", "日本語"), ("es", "Español"))
+I18N_DIR = Path(__file__).resolve().parent / "i18n"
+_I18N_CACHE = {}
+
+
+def load_lang(code):
+    """UI strings for code, falling back to English per key. Default en."""
+    if code not in _I18N_CACHE:
+        try:
+            data = json.loads((I18N_DIR / f"{code}.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            data = {}
+        _I18N_CACHE[code] = data if isinstance(data, dict) else {}
+    if code == "en":
+        return _I18N_CACHE["en"]
+    base = load_lang("en")
+    merged = dict(base)
+    merged.update(_I18N_CACHE[code])
+    return merged
+
+
+def request_lang(path):
+    try:
+        qs = parse_qsl(urlsplit(path).query)
+    except ValueError:
+        return "en"
+    for k, v in qs:
+        if k == "lang" and any(v == c for c, _ in LANGS):
+            return v
+    return "en"
+
+
+def lang_switcher(cur, path):
+    base = urlsplit(path).path or "/"
+    links = []
+    opts = []
+    for code, label in LANGS:
+        if code == cur:
+            links.append(f'<span class="langcur" aria-current="true">{esc(label)}</span>')
+        else:
+            links.append(f'<a class="langlink" href="{esc(base)}?lang={code}" data-lang="{code}">{esc(label)}</a>')
+        sel = " selected" if code == cur else ""
+        opts.append(f'<option value="{code}"{sel}>{esc(label)}</option>')
+    return ('<span class="langsw">' + " · ".join(links) + "</span>"
+            '<span class="langglobe" aria-hidden="true">🌐</span>'
+            f'<select class="langsel" aria-label="Language" data-langbase="{esc(base)}">'
+            + "".join(opts) + "</select>")
+
+
+LANG_JS = """<script>
+(function(){try{
+var q=new URLSearchParams(location.search);
+if(!q.get('lang')){try{var l=localStorage.getItem('wolang');
+if(l){q.set('lang',l);location.search=q.toString();return;}}catch(e){}}
+document.querySelectorAll('[data-lang]').forEach(function(a){
+a.addEventListener('click',function(){
+try{localStorage.setItem('wolang',a.getAttribute('data-lang'));}catch(e){}});});
+document.querySelectorAll('.langsel').forEach(function(s){
+s.addEventListener('change',function(){
+var v=s.value;try{localStorage.setItem('wolang',v);}catch(e){}
+location.href=s.getAttribute('data-langbase')+'?lang='+encodeURIComponent(v);});});
+}catch(e){}})();
+</script>"""
 LOCAL_HOSTS = {"127.0.0.1", "localhost"}
 
 
@@ -708,6 +773,12 @@ h2{font-size:19px;margin:22px 0 8px}h3{font-size:16px;margin:16px 0 6px}
 .step .ev{color:#3d4a44}
 .hintline{font-size:14px;color:#3d4a44;margin:4px 0}
 .warnline{font-size:14px;color:#8a4d00;font-weight:600;margin:4px 0}
+.langsw{font-size:13px;color:#5a6560}.langlink{color:#1a6fd4;text-decoration:none}.langcur{font-weight:700;color:#1c2420}
+.langsel{display:none;font-size:13px;max-width:110px}
+.langglobe{display:none}
+.brand{white-space:nowrap}
+.topnav{gap:8px;flex-wrap:nowrap}
+@media(max-width:480px){.langsw{display:none}.langsel{display:inline-block}.langglobe{display:inline}}
 .nrbadge{font-size:12px;font-weight:600;color:#8a4d00;background:#fff3e0;border:1px solid #e0a63f;border-radius:10px;padding:1px 8px;white-space:nowrap}
 .hero{display:grid;grid-template-columns:1.15fr .85fr;gap:20px;align-items:center;margin:2px 0 18px}
 @media(max-width:900px){.hero{grid-template-columns:1fr}}
@@ -853,70 +924,70 @@ footer{margin-top:28px;color:#3d4a44;font-size:13px}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 </style>"""
 
-HOME_TMPL = """<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Watch Once — video to manual + robot JSON</title>{css}</head>
+HOME_TMPL = """<!doctype html><html lang="{lang}"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>{t[title_home]}</title>{css}</head>
 <body><main>
-<p class="topnav"><span class="brand">Watch Once</span><button type="button" class="textbtn" data-opendlg>Settings</button></p>
+<p class="topnav"><span class="brand">{t[brand]}</span>{langsw}<button type="button" class="textbtn" data-opendlg>{t[settings]}</button></p>
 <div class="hero">
 <div class="lede">
-<h1>Turn a how-to video into a manual for people and step data for robots.</h1>
-<p class="sub">Upload a short video &rarr; we split it into timed steps &rarr; read the manual or export it.</p>
-<p><a class="btnlink" href="#pick">Upload a video</a></p>
+<h1>{t[hero_title]}</h1>
+<p class="sub">{t[hero_sub]}</p>
+<p><a class="btnlink" href="#pick">{t[hero_cta]}</a></p>
 </div>
 {herocompare}
 </div>
-<div class="card" id="pick"><h2>1. Pick a video</h2>
+<div class="card" id="pick"><h2>{t[pick_h2]}</h2>
 <form method="post" action="/analyze" enctype="multipart/form-data">
-<p class="getback-lede">Upload a how-to video. Get back:</p>
+<p class="getback-lede">{t[getback_lede]}</p>
 <div class="gbgrid">
-<div class="gb"><span class="gbn">1</span><b>Human manual</b><span>step-by-step with key frames</span></div>
-<div class="gb"><span class="gbn">2</span><b>Robot-ready step JSON</b><span>object / action / target / pre / done + timestamps</span></div>
-<div class="gb"><span class="gbn">3</span><b>Exports</b><span>LeRobot annotations, VLA instructions, planner steps</span></div>
-<div class="gb"><span class="gbn">4</span><b>Navide task payload</b><span>generated for review only, not auto-submitted</span></div>
+<div class="gb"><span class="gbn">1</span><b>{t[gb1t]}</b><span>{t[gb1s]}</span></div>
+<div class="gb"><span class="gbn">2</span><b>{t[gb2t]}</b><span>{t[gb2s]}</span></div>
+<div class="gb"><span class="gbn">3</span><b>{t[gb3t]}</b><span>{t[gb3s]}</span></div>
+<div class="gb"><span class="gbn">4</span><b>{t[gb4t]}</b><span>{t[gb4s]}</span></div>
 </div>
-<p class="fitnote">Best for: one person or machine doing one thing, 10–60s, steady camera, clear actions.</p>
-<p class="limitnote">Limits: step splitting is unstable — the same clip may split into 2 or 4 steps. Always review results by hand.</p>
+<p class="fitnote">{t[fitnote]}</p>
+<p class="limitnote">{t[limitnote]}</p>
 <label class="drop" id="drop" for="filein">
 <input type="file" name="video" id="filein" class="vh" accept="video/*,.mov,.mkv,.avi,.flv,.wmv,.ts,.mts,.m2ts,.3gp,.ogv,.gif">
 <span class="dropicon" aria-hidden="true">⇪</span>
-<span class="dropmsg">Drop a video here or click to choose · any format ffmpeg can read · max 100 MB · stays on this machine</span>
-<span class="filebtnlike">Choose file</span>
+<span class="dropmsg">{t[drop_msg]}</span>
+<span class="filebtnlike">{t[choose_file]}</span>
 </label>
 <p class="filename" id="fname" hidden></p>
-<p><button type="button" class="ghost small" id="rmfile" hidden>Remove</button></p>
-<label class="f" for="hintin">What is in the clip? (optional, naming help only)</label>
-<div><input type="text" id="hintin" name="task_hint" maxlength="200" autocomplete="off" placeholder="e.g. washers on a shaft"></div>
-<label class="f"><input type="checkbox" name="vote3" value="yes"> Majority vote: run 3 times and merge (~3&times; cost, steadier steps)</label>
+<p><button type="button" class="ghost small" id="rmfile" hidden>{t[remove]}</button></p>
+<label class="f" for="hintin">{t[hint_label]}</label>
+<div><input type="text" id="hintin" name="task_hint" maxlength="200" autocomplete="off" placeholder="{t[hint_ph]}"></div>
+<label class="f"><input type="checkbox" name="vote3" value="yes"> {t[vote_label]}</label>
 {cta}
 <div class="keyline">
 {key_status}
 </div>
 </form></div>
-<div class="card"><h2>How it works</h2>
+<div class="card"><h2>{t[how_h2]}</h2>
 <div class="pipe" aria-hidden="true">
-<div class="node"><b>1 · Video</b><span>Upload MP4 to analyze</span></div><div class="arrow">&rarr;</div>
-<div class="node"><b>2 · Steps</b><span>AI splits motion into timed steps</span></div><div class="arrow">&rarr;</div>
-<div class="node"><b>3 · Manual + JSON</b><span>Read it, or feed it to a robot</span></div>
+<div class="node"><b>{t[pipe1t]}</b><span>{t[pipe1s]}</span></div><div class="arrow">&rarr;</div>
+<div class="node"><b>{t[pipe2t]}</b><span>{t[pipe2s]}</span></div><div class="arrow">&rarr;</div>
+<div class="node"><b>{t[pipe3t]}</b><span>{t[pipe3s]}</span></div>
 </div>
-<ul class="chips"><li>Runs 100% on this machine</li><li>Meta Muse Spark, paid by approval</li><li>Every claim traceable to frames</li></ul>
+<ul class="chips"><li>{t[chip1]}</li><li>{t[chip2]}</li><li>{t[chip3]}</li></ul>
 </div>
-<div class="card scroll"><h2>2. History</h2>{history}</div>
-<footer>Local app · CLI untouched · Meta Muse Spark inside</footer>
+<div class="card scroll"><h2>{t[history_h2]}</h2>{history}</div>
+<footer>{t[footer]}</footer>
 </main>
 <dialog id="settingsDlg" aria-labelledby="dlgTitle">
 <form method="dialog" class="dlgclose"><button type="submit" aria-label="Close">×</button></form>
-<h2 id="dlgTitle">Settings</h2>
+<h2 id="dlgTitle">{t[settings]}</h2>
 <p class="mono" id="dlgStatus"></p>
 <p class="err" id="dlgErr"></p>
 <form id="dlgKeyForm" method="post" action="/settings/save">
 <input type="hidden" name="csrf" value="{csrf}">
-<label class="f" for="dk">Meta API key (stored in app/.env, file mode 0600)</label>
-<div><input type="password" id="dk" name="key" autocomplete="off" placeholder="paste key, save takes effect immediately"></div>
-<div class="btnrow"><button type="submit">Save key</button></div>
+<label class="f" for="dk">{t[key_label]}</label>
+<div><input type="password" id="dk" name="key" autocomplete="off" placeholder="{t[key_ph]}"></div>
+<div class="btnrow"><button type="submit">{t[save_key]}</button></div>
 </form>
 <form id="dlgClearForm" method="post" action="/settings/clear" style="margin-top:8px">
 <input type="hidden" name="csrf" value="{csrf}">
-<button type="submit" class="ghost">Clear key from .env</button>
+<button type="submit" class="ghost">{t[clear_key]}</button>
 </form>
 </dialog>
 <script>
@@ -953,29 +1024,30 @@ document.getElementById('dlgClearForm').addEventListener('submit',function(e){{e
   postDlg(e.target,function(){{document.getElementById('keywrap').innerHTML='Meta API key: <b class="warn">not configured</b> <button type="button" class="textbtn" data-opendlg>Set up</button>'+keepBudget();}});}});
 }}
 </script>
+{langjs}
 </body></html>"""
 
-JOB_TMPL = """<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Analyzing {job}</title>{css}</head>
-<body><main><p><a href="/">&larr; Home</a></p><h1 id="title">Analyzing&hellip;</h1>
+JOB_TMPL = """<!doctype html><html lang="{lang}"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>{t[job_title]} {job}</title>{css}</head>
+<body><main><p class="topnav"><a href="/{langqs}">&larr; {t[home]}</a>{langsw}</p><h1 id="title">{t[job_title]}</h1>
 <p class="sub mono">{job}</p>
-<p class="elapsedline" id="provline">Provider: &hellip;</p>
-<p class="elapsedline">Elapsed <b id="elapsed">0.0s</b></p>
+<p class="elapsedline" id="provline">{t[provider]}: &hellip;</p>
+<p class="elapsedline">{t[elapsed]} <b id="elapsed">0.0s</b></p>
 <div class="card"><ol class="stages" id="stages">
-<li class="wait"><span class="sic">1</span><div class="sbody"><b>Checking video</b><p class="sdetail"></p></div></li>
-<li class="wait"><span class="sic">2</span><div class="sbody"><b>Extracting frames</b><p class="sdetail"></p></div></li>
-<li class="wait"><span class="sic">3</span><div class="sbody"><b>Sending to Muse Spark</b><p class="sdetail"></p></div></li>
-<li class="wait"><span class="sic">4</span><div class="sbody"><b>Model analyzing</b><p class="sdetail"></p></div></li>
-<li class="wait"><span class="sic">5</span><div class="sbody"><b>Validating steps</b><p class="sdetail"></p></div></li>
-<li class="wait"><span class="sic">6</span><div class="sbody"><b>Writing manual</b><p class="sdetail"></p></div></li>
-<li class="wait"><span class="sic">7</span><div class="sbody"><b>Done</b><p class="sdetail"></p></div></li>
+<li class="wait"><span class="sic">1</span><div class="sbody"><b>{t[checking_video]}</b><p class="sdetail"></p></div></li>
+<li class="wait"><span class="sic">2</span><div class="sbody"><b>{t[extracting_frames]}</b><p class="sdetail"></p></div></li>
+<li class="wait"><span class="sic">3</span><div class="sbody"><b>{t[sending_to_spark]}</b><p class="sdetail"></p></div></li>
+<li class="wait"><span class="sic">4</span><div class="sbody"><b>{t[model_analyzing]}</b><p class="sdetail"></p></div></li>
+<li class="wait"><span class="sic">5</span><div class="sbody"><b>{t[validating_steps]}</b><p class="sdetail"></p></div></li>
+<li class="wait"><span class="sic">6</span><div class="sbody"><b>{t[writing_manual]}</b><p class="sdetail"></p></div></li>
+<li class="wait"><span class="sic">7</span><div class="sbody"><b>{t[done]}</b><p class="sdetail"></p></div></li>
 </ol></div>
-<div class="card" id="filmcard" hidden><h2>Frames</h2><div class="film" id="film"></div>
-<div class="scanwrap" id="scanwrap" hidden><div class="scanbeam"></div><p>Muse Spark is watching the video&hellip;</p></div></div>
-<div class="card" id="donecard" hidden><h2>Done</h2><div class="donesteps" id="donesteps"></div><p id="donesum"></p><p><a id="openresult" class="btnlink" href="#">Open result</a></p></div>
+<div class="card" id="filmcard" hidden><h2>{t[frames]}</h2><div class="film" id="film"></div>
+<div class="scanwrap" id="scanwrap" hidden><div class="scanbeam"></div><p>{t[watching]}</p></div></div>
+<div class="card" id="donecard" hidden><h2>{t[done]}</h2><div class="donesteps" id="donesteps"></div><p id="donesum"></p><p><a id="openresult" class="btnlink" href="#">{t[open_result]}</a></p></div>
 <p id="err" class="err"></p>
-<p class="errlinks" id="errlinks" hidden><a href="/">&larr; Back</a> &middot; <a href="/#pick">Try again</a></p>
-<details class="advlog"><summary>Activity log</summary><pre id="alog" class="mono"></pre></details>
+<p class="errlinks" id="errlinks" hidden><a href="/{langqs}">&larr; {t[back]}</a> &middot; <a href="/{langqs}#pick">{t[try_again]}</a></p>
+<details class="advlog"><summary>{t[activity_log]}</summary><pre id="alog" class="mono"></pre></details>
 </main>
 <script>
 var NAMES=["Checking video","Extracting frames","Sending to Muse Spark","Model analyzing","Validating steps","Writing manual","Done"];
@@ -1059,34 +1131,36 @@ async function poll(){{
 }}
 window.onload=poll;
 </script>
+{langjs}
 </body></html>"""
 
-RESULT_TMPL = """<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Result {run}</title>{css}</head>
+RESULT_TMPL = """<!doctype html><html lang="{lang}"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>{t[result_title]} {run}</title>{css}</head>
 <body><main>
-<p><a href="/">&larr; Home</a></p>
-<h1>Result: {run}</h1>
+<p class="topnav"><a href="/{langqs}">&larr; {t[home]}</a>{langsw}</p>
+<h1>{t[result_title]}: {run}</h1>
 <p>{badges}</p>
 {hintline}
 {flagline}
 <p class="sub">{meta}</p>
 <div class="cols">
-<div class="card manual pane"><h2>Human manual</h2>
+<div class="card manual pane"><h2>{t[human_manual]}</h2>
+<p class="sub">{t[model_output_note]}</p>
 <ol class="tl">{timeline}</ol>
-<details class="provenance"><summary>Provenance &amp; source notes</summary>{provelog}</details>
-<details open><summary>Full manual</summary>{manual}</details></div>
-<div class="card pane"><h2>Robot operation JSON</h2>{cards}
-<details><summary>Full operations.json</summary><pre>{ops}</pre></details></div>
+<details class="provenance"><summary>{t[provenance]}</summary>{provelog}</details>
+<details open><summary>{t[full_manual]}</summary>{manual}</details></div>
+<div class="card pane"><h2>{t[robot_json]}</h2>{cards}
+<details><summary>{t[full_operations]}</summary><pre>{ops}</pre></details></div>
 </div>
-<div class="card"><h2>Export for robots / VLA</h2>
-<p class="sub">Format-aligned input-ready annotations. No robot states or actions included; never run on a real robot or VLA.</p>
+<div class="card"><h2>{t[export_h2]}</h2>
+<p class="sub">{t[export_note]}</p>
 <p><a href="/export/{run}/lerobot">LeRobot annotation</a> · <a href="/export/{run}/vla">VLA sequence</a> · <a href="/export/{run}/plan">Plan steps</a></p>
 {export_preview}
 </div>
-<div class="card"><h2>Send to Navide</h2>
+<div class="card"><h2>{t[navide_h2]}</h2>
 <p>{navide_summary}</p>
 <form method="post" action="/api/navide/{run}">
-<button type="submit">Generate plan_create payload</button></form>
+<button type="submit">{t[gen_payload]}</button></form>
 {payload}
 {verdict}
 </div>
@@ -1114,6 +1188,7 @@ document.querySelectorAll("[data-copy]").forEach(function(btn){{
   }});
 }});
 </script>
+{langjs}
 </body></html>"""
 
 
@@ -1187,8 +1262,8 @@ def _merge_vote_rounds(job_id, out_dir, round_dirs, started_at):
                "reason": "JSON export only; --send-navide was not requested."}
         (out_dir / "submission.json").write_text(json.dumps(sub, ensure_ascii=False, indent=1))
         _push_event(job_id, time.time() - started_at,
-                    f"Voted: {stats['n_steps']} steps, {stats['agreed']} agreed, "
-                    f"{stats['needs_review']} needs_review")
+                    f"Voted: {stats['n_steps']} steps from {stats['n_runs']} runs, "
+                    f"{stats['proposals']} proposals")
         return 0
     except (OSError, ValueError, KeyError, ImportError) as exc:
         _push_event(job_id, time.time() - started_at, f"Vote merge failed: {exc}")
@@ -1320,7 +1395,7 @@ def run_cli_job(job_id, video_path, provider, task_hint="", vote3=False):
 SHOWCASE_RUN = "web-20261103T111002Z"
 
 
-def beforeafter_html():
+def beforeafter_html(t):
     """Real before/after from the M1 live run; empty string when unavailable."""
     d = safe_run_dir(SHOWCASE_RUN)
     if d is None:
@@ -1355,11 +1430,11 @@ def beforeafter_html():
         return (
             '<div class="beforeafter">'
             f'<figure class="ba"><img alt="Input frame" src="/frames/{SHOWCASE_RUN}/{esc(thumbs[0][0])}" loading="lazy">'
-            "<figcaption>Before: one frame in</figcaption></figure>"
+            f"<figcaption>{t['ba_before']}</figcaption></figure>"
             '<div class="arrow">&rarr;</div>'
-            '<div class="baout"><p class="balead">After: timed steps + manual</p>'
+            f'<div class="baout"><p class="balead">{t["ba_after"]}</p>'
             f'<ul class="basteps">{lis}</ul>'
-            f'<p class="basrc">Example output from a real {model_disp} run (prompt v2)</p></div></div>')
+            f'<p class="basrc">{t["ba_src"].format(model=model_disp)}</p></div></div>')
     except (OSError, ValueError):
         return ""
 
@@ -1379,14 +1454,18 @@ class Handler(BaseHTTPRequestHandler):
 
     def send_html(self, body, code=200):
         if not body.lstrip().startswith("<!doctype"):
-            body = (f"<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+            lang = request_lang(self.path)
+            t = load_lang(lang)
+            langqs = f"?lang={lang}" if lang != "en" else ""
+            body = (f"<!doctype html><html lang=\"{lang}\"><head><meta charset=\"utf-8\">"
                     f"<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
                     f"<title>WatchOnce</title>{CSS}</head><body><main>"
-                    f"<p><a href=\"/\">&larr; Home</a></p><div class=\"card errpage\">{body}"
-                    f"<p class=\"sub\">Nothing was submitted or changed. "
-                    f"Go back and try again with an MP4 upload.</p>"
-                    f"<p><a class=\"cta\" href=\"/#pick\">Back to upload</a></p></div>"
-                    f"</main></body></html>")
+                    f"<p class=\"topnav\"><a href=\"/{langqs}\">&larr; {t['home']}</a>"
+                    f"{lang_switcher(lang, self.path)}</p><div class=\"card errpage\">{body}"
+                    f"<p class=\"sub\">{t['error_nothing']} "
+                    f"{t['error_goback']}</p>"
+                    f"<p><a class=\"cta\" href=\"/{langqs}#pick\">{t['back_to_upload']}</a></p></div>"
+                    f"{LANG_JS}</main></body></html>")
         data = body.encode()
         self.send_response(code)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -1420,8 +1499,13 @@ class Handler(BaseHTTPRequestHandler):
             job = path[len("/job/"):]
             with jobs_lock:
                 if job not in jobs:
-                    return self.send_html("<h1>Unknown job</h1>", 404)
-            return self.send_html(JOB_TMPL.format(css=CSS, job=esc(job)))
+                    t404 = load_lang(request_lang(self.path))
+                    return self.send_html(f"<h1>{t404['unknown_job']}</h1>", 404)
+            lang = request_lang(self.path)
+            langqs = f"?lang={lang}" if lang != "en" else ""
+            return self.send_html(JOB_TMPL.format(css=CSS, job=esc(job), t=load_lang(lang),
+                                                 lang=lang, langsw=lang_switcher(lang, self.path),
+                                                 langqs=langqs, langjs=LANG_JS))
         if path.startswith("/api/job/"):
             job = path[len("/api/job/"):]
             with jobs_lock:
@@ -1502,48 +1586,53 @@ class Handler(BaseHTTPRequestHandler):
         return self.send_html("<h1>Not found</h1>", 404)
 
     def page_home(self):
+        lang = request_lang(self.path)
+        t = load_lang(lang)
         runs = list_runs()
         rows = "".join(
             f'<tr><td><a href="/result/{esc(r["id"])}">{esc(r["id"])}</a></td>'
             f'<td>{esc(r["video"])}</td><td>{esc(r["provider"])}</td>'
             f'<td>{r["steps"]}</td><td>{esc(r["mtime"])}</td></tr>'
             for r in runs)
-        history = (f"<table><tr><th>Run</th><th>Video</th><th>Provider</th><th>Steps</th><th>Time</th></tr>{rows}</table>"
-                   if rows else '<p>No runs yet — upload a video above to analyze it.</p>')
+        history = (f"<table><tr><th>{t['th_run']}</th><th>{t['th_video']}</th><th>{t['th_provider']}</th><th>{t['th_steps']}</th><th>{t['th_time']}</th></tr>{rows}</table>"
+                   if rows else f"<p>{t['history_empty']}</p>")
         b = load_budget()
         lim = get_limits()
-        budget = (f"Budget used today: {int(b.get('paid_calls', 0))}/{lim['max_calls']} calls, "
+        budget = (f"{t['budget_used']}: {int(b.get('paid_calls', 0))}/{lim['max_calls']} {t['budget_calls']}, "
                   f"${float(b.get('spend_usd', 0.0)):.4f} / ${lim['max_usd']:.2f}")
-        herocompare = beforeafter_html()
+        herocompare = beforeafter_html(t)
         last4 = masked_last4()
         if last4:
             key_status = ('<div id="keywrap">'
-                          f'<p class="mono">Meta API key: <b class="ok">configured · {esc(last4)}</b> '
-                          '<button type="button" class="textbtn" data-opendlg>Set up</button>'
+                          f'<p class="mono">Meta API key: <b class="ok">{t["status_configured"]} · {esc(last4)}</b> '
+                          f'<button type="button" class="textbtn" data-opendlg>{t["set_up"]}</button>'
                           f' · {budget}</p></div>')
         else:
+            setup_html = t["setup_text"].format(
+                export="<code>export META_API_KEY=…</code>", env="<code>.env.example</code>",
+                envfile="<code>.env</code>",
+                dlg=f'<button type="button" class="textbtn" data-opendlg>{t["settings_dialog"]}</button>')
             key_status = ('<div id="keywrap">'
-                          '<p class="mono">Meta API key: <b class="warn">not configured</b> '
-                          '<button type="button" class="textbtn" data-opendlg>Set up</button>'
+                          f'<p class="mono">Meta API key: <b class="warn">{t["not_configured"]}</b> '
+                          f'<button type="button" class="textbtn" data-opendlg>{t["set_up"]}</button>'
                           f' · {budget}</p>'
-                          '<p class="sub">To enable live Meta inference, run '
-                          '<code>export META_API_KEY=…</code> before starting the server, copy '
-                          '<code>.env.example</code> to <code>.env</code> in app/ and fill it in, '
-                          'or set it in the <button type="button" class="textbtn" data-opendlg>Settings dialog</button>. '
-                          'The key never leaves this machine and is never shown here.</p></div>')
+                          f'<p class="sub">{setup_html}</p></div>')
         if last4:
-            cta = ('<label class="f"><input type="checkbox" name="confirm" value="yes"> '
-                   'This analysis uses your Meta API credit (about US$0.02-0.03 for a 14s clip, '
-                   'includes full-resolution keyframes; depends on video length).</label>'
-                   '<div class="btnrow"><button type="submit" class="big">Analyze</button></div>')
+            cta = (f'<label class="f"><input type="checkbox" name="confirm" value="yes"> {t["confirm_cost"]}</label>'
+                   f'<div class="btnrow"><button type="submit" class="big">{t["analyze"]}</button></div>')
         else:
-            cta = ('<div class="btnrow"><button type="button" class="big" data-opendlg>'
-                   'Set up your Meta API key to analyze &rarr;</button></div>')
+            cta = (f'<div class="btnrow"><button type="button" class="big" data-opendlg>{t["setup_cta"]}</button></div>')
+        langqs = f"?lang={lang}" if lang != "en" else ""
         self.send_html(HOME_TMPL.format(css=CSS, history=history, herocompare=herocompare,
                                         key_status=key_status, cta=cta, showcase=SHOWCASE_RUN,
-                                        csrf=_CSRF_TOKEN))
+                                        csrf=_CSRF_TOKEN, t=t, lang=lang,
+                                        langsw=lang_switcher(lang, self.path), langqs=langqs,
+                                        langjs=LANG_JS))
 
     def page_log_run(self, d):
+        lang = request_lang(self.path)
+        t = load_lang(lang)
+        langqs = f"?lang={lang}" if lang != "en" else ""
         left_src = "(no readable artifact)"
         for cand in ("checklist.md", "report.md", "failure-report.md"):
             if (d / cand).is_file():
@@ -1559,19 +1648,21 @@ class Handler(BaseHTTPRequestHandler):
                 except ValueError:
                     pass
         right = esc(clean_path_text(json.dumps(summary, indent=1, ensure_ascii=False)[:12000]))
-        body = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Run {esc(d.name)}</title>{CSS}</head>
-<body><main><p><a href="/">&larr; Home</a></p><h1>Run: {esc(d.name)}</h1>
+        body = f"""<!doctype html><html lang="{lang}"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>{t['checklist_title']} {esc(d.name)}</title>{CSS}</head>
+<body><main><p class="topnav"><a href="/{langqs}">&larr; {t['home']}</a>{lang_switcher(lang, self.path)}</p><h1>{t['run']}: {esc(d.name)}</h1>
 <p class="sub">Loop / log run (no validated operations.json).</p>
 <div class="cols"><div class="card manual pane"><h2>Report</h2>{left}</div>
 <div class="card pane"><h2>Summary JSON</h2><pre>{right}</pre></div></div>
-</main></body></html>"""
+{LANG_JS}</main></body></html>"""
         self.send_html(body)
 
     def page_result(self, run_id):
+        lang = request_lang(self.path)
+        t = load_lang(lang)
         d = safe_run_dir(unquote(run_id))
         if d is None:
-            return self.send_html("<h1>Run not found</h1>", 404)
+            return self.send_html(f"<h1>{t['error_run_not_found']}</h1>", 404)
         try:
             doc = json.loads((d / "operations.json").read_text()) if (d / "operations.json").is_file() else None
         except ValueError:
@@ -1579,7 +1670,7 @@ class Handler(BaseHTTPRequestHandler):
         if doc is None:
             return self.page_log_run(d)
         src = doc.get("source", {})
-        manual_src = (d / "manual.md").read_text() if (d / "manual.md").is_file() else "(no manual)"
+        manual_src = (d / "manual.md").read_text() if (d / "manual.md").is_file() else t["no_manual"]
         mlines = manual_src.splitlines()
         cut = next((k for k, ln in enumerate(mlines)
                     if re.match(r"^#{2,3}\s+(step-0*\d|\d+\.\s+step-)", ln)), None)
@@ -1587,7 +1678,7 @@ class Handler(BaseHTTPRequestHandler):
             head_md, body_md = "", manual_src
         else:
             head_md, body_md = "\n".join(mlines[:cut]), "\n".join(mlines[cut:])
-        provelog = render_markdown(head_md, d.name) if head_md.strip() else "<p>No provenance block.</p>"
+        provelog = render_markdown(head_md, d.name) if head_md.strip() else f"<p>{t['no_provenance']}</p>"
         manual = render_markdown(body_md, d.name)
         ops = esc(clean_path_text(json.dumps(doc, indent=1, ensure_ascii=False)[:20000]))
         steps = doc.get("steps", [])
@@ -1603,7 +1694,7 @@ class Handler(BaseHTTPRequestHandler):
             hint = (prov.get("metadata", {}) or {}).get("task_hint") or ""
         except (OSError, ValueError):
             hint = ""
-        hintline = (f'<p class="hintline">Task hint used: {esc(hint[:200])}</p>' if hint else "")
+        hintline = (f'<p class="hintline">{t["task_hint_used"]}: {esc(hint[:200])}</p>' if hint else "")
         flagline = "".join(f'<p class="warnline">⚠ {esc(f)}</p>' for f in review_flags(d))
         cards = []
         for i, s in enumerate(steps, 1):
@@ -1614,15 +1705,15 @@ class Handler(BaseHTTPRequestHandler):
                 fn = frame_file_for(d, refs[0])
                 if fn:
                     img = f"<img alt=\"step {i} frame\" src=\"/frames/{esc(d.name)}/{esc(fn)}\" loading=\"lazy\">"
-            nr = " <span class=\"nrbadge\">needs review</span>" if str(s.get("evidence") or "").startswith("needs_review") else ""
+            nr = f" <span class=\"nrbadge\">{t['needs_review']}</span>" if str(s.get("evidence") or "").startswith("needs_review") else ""
             cards.append(
                 f"<div class=\"step\" data-step=\"{i}\">{img}<div class=\"t\">"
-                f"<b>Step {i} · {esc(c.get('action', '?')[:60])}</b>{nr}<br>"
+                f"<b>{t['step']} {i} · {esc(c.get('action', '?')[:60])}</b>{nr}<br>"
                 f"{esc(c.get('object', '?')[:80])} &rarr; {esc(c.get('target', '?')[:80])}<br>"
-                f"<small class=\"ev\">Evidence: {esc(str(s.get('evidence') or 'not recorded — run predates the evidence field')[:140])}</small><br>"
+                f"<small class=\"ev\">{t['evidence']}: {esc(str(s.get('evidence') or t['not_recorded'])[:140])}</small><br>"
                 f"<code>{s.get('start_ms', '?')}–{s.get('end_ms', '?')} ms</code> "
-                f"<button type=\"button\" class=\"ghost\" data-copy=\"stepjson-{i}\">Copy JSON</button>"
-                f"<details><summary>Step JSON</summary><pre id=\"stepjson-{i}\">"
+                f"<button type=\"button\" class=\"ghost\" data-copy=\"stepjson-{i}\">{t['copy_json']}</button>"
+                f"<details><summary>{t['step_json']}</summary><pre id=\"stepjson-{i}\">"
                 f"{esc(clean_path_text(json.dumps(s, ensure_ascii=False)[:3000]))}</pre></details>"
                 f"</div></div>")
         cards_html = "\n".join(cards)
@@ -1679,11 +1770,14 @@ class Handler(BaseHTTPRequestHandler):
             export_preview = "\n".join(previews)
         except (ValueError, OSError) as exc:
             export_preview = f"<p>Export unavailable: {esc(clean_path_text(exc))}</p>"
+        langqs = f"?lang={lang}" if lang != "en" else ""
         self.send_html(RESULT_TMPL.format(css=CSS, run=esc(d.name), meta=meta, manual=manual,
                                           ops=ops, navide_summary=navide_summary, payload=payload, verdict=verdict,
                                           export_preview=export_preview, badges=badges, cards=cards_html,
                                           timeline=timeline, provelog=provelog, hintline=hintline,
-                                          flagline=flagline))
+                                          flagline=flagline, t=t, lang=lang,
+                                          langsw=lang_switcher(lang, self.path), langqs=langqs,
+                                          langjs=LANG_JS))
 
     def do_POST(self):
         parts = urlsplit(self.path)

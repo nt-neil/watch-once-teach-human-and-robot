@@ -70,12 +70,13 @@ def parse_samples(log):
     return origin, samples
 
 
-def extract_keyframes(video_path, output_dir, manifest, interval_ms=3000, max_frames=15):
+def extract_keyframes(video_path, output_dir, manifest, interval_ms=3000, max_frames=15, mode="uniform"):
     """Pick full-resolution frames at fixed intervals for model input (E2).
 
     Scene detection misses small UI changes, so sample uniformly: every
     interval_ms guarantees half-interval coverage of any event. Images are
-    NOT downscaled. Stops at max_frames.
+    NOT downscaled. Stops at max_frames. mode="diff" adds scene-change
+    triggers between uniform samples (flag-only experiment, default off).
     """
     video_path, output_dir = Path(video_path), Path(output_dir)
     origin = manifest["timeline_origin_ms"]
@@ -85,8 +86,10 @@ def extract_keyframes(video_path, output_dir, manifest, interval_ms=3000, max_fr
     kf_dir.mkdir(exist_ok=True)
     for old in kf_dir.glob("*.jpg"):
         old.unlink()
-    filters = (f"showinfo@source,select=isnan(prev_selected_t)+gte(t-prev_selected_t\\,{interval_ms / 1000}),"
-               "showinfo@sample")
+    selector = f"isnan(prev_selected_t)+gte(t-prev_selected_t\\,{interval_ms / 1000})"
+    if mode == "diff":
+        selector += "+gt(scene\\,0.01)"
+    filters = f"showinfo@source,select={selector},showinfo@sample"
     result = run_media([
         "ffmpeg", "-hide_banner", "-nostdin", "-v", "info", "-xerror",
         "-copyts", "-i", str(video_path), "-map", f"0:{stream_index}",

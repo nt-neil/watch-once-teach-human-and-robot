@@ -649,5 +649,60 @@ class WebRegressionTests(unittest.TestCase):
                 WEB.jobs.pop("job-regtest", None)
 
 
+class I18nTests(unittest.TestCase):
+    def test_default_is_english_unchanged(self):
+        head, data = request(b"GET / HTTP/1.1\r\n"
+                             b"Host: x\r\nConnection: close\r\n\r\n")
+        html = data.decode()
+        self.assertIn('<html lang="en">', html)
+        self.assertIn("Turn a how-to video into a manual for people", html)
+        self.assertIn("1. Pick a video", html)
+        self.assertIn("How it works", html)
+
+    def test_lang_packs_have_same_keys_and_render(self):
+        import json
+        base = set(json.loads((APP_DIR / "web" / "i18n" / "en.json").read_text()))
+        self.assertGreater(len(base), 90)
+        for code in ("zh-Hant", "zh-Hans", "ja", "es"):
+            pack = set(json.loads((APP_DIR / "web" / "i18n" / f"{code}.json").read_text()))
+            self.assertEqual(pack, base, code)
+            raw = (f"GET /?lang={code} HTTP/1.1\r\n"
+                   "Host: x\r\nConnection: close\r\n\r\n").encode()
+            head, data = request(raw)
+            self.assertIn("200", head.splitlines()[0])
+            self.assertIn(f'<html lang="{code}">', data.decode())
+
+    def test_lang_falls_back_to_english(self):
+        self.assertEqual(WEB.load_lang("xx")["hero_cta"], "Upload a video")
+        head, data = request(b"GET /?lang=xx HTTP/1.1\r\n"
+                             b"Host: x\r\nConnection: close\r\n\r\n")
+        self.assertIn('<html lang="en">', data.decode())
+
+    def test_switcher_and_persistence_hook_present(self):
+        head, data = request(b"GET / HTTP/1.1\r\n"
+                             b"Host: x\r\nConnection: close\r\n\r\n")
+        html = data.decode()
+        self.assertIn('class="langsw"', html)
+        self.assertIn('?lang=ja', html)
+        self.assertIn("localStorage.setItem('wolang'", html)
+        self.assertIn('class="langsel"', html)
+        self.assertIn("🌐", html)
+        self.assertIn("After: timed steps + manual", html)
+
+    def test_model_output_note_shown(self):
+        import re
+        run = None
+        for d in sorted((APP_DIR / "runs").glob("web-*")):
+            if (d / "operations.json").is_file():
+                run = d.name
+                break
+        if run is None:
+            self.skipTest("no web run present")
+        raw = (f"GET /result/{run} HTTP/1.1\r\n"
+               "Host: x\r\nConnection: close\r\n\r\n").encode()
+        head, data = request(raw)
+        self.assertIn("model output, shown in the original language", data.decode())
+
+
 if __name__ == "__main__":
     unittest.main()
