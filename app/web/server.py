@@ -893,6 +893,11 @@ details.advlog summary{cursor:pointer;font-weight:600;color:#3d4a44}
 .filebtnlike{display:inline-block;font-size:15px;font-weight:600;padding:8px 22px;background:#ffffff;color:#0b5c4c;border:2px solid #0b5c4c;border-radius:6px}
 .filename{font-size:14px;overflow-wrap:break-word;min-width:0}
 .filecaprow{margin:10px 0 0}
+.preview{margin-top:10px}
+.preview video{width:100%;max-height:360px;object-fit:contain;border:1px solid #d8dee6;border-radius:8px;background:#1a2420;display:block}
+#previewVideo[hidden]{display:none}
+.previewmeta{font-size:13.5px;color:#3d4a44;margin:6px 0 0}
+.previewnote{font-size:13.5px;color:#3d4a44;margin:6px 0 0}
 .filecap{display:none;align-items:center;gap:10px;background:#eef6f1;border:1px solid #bcd4c9;border-radius:99px;padding:6px 8px 6px 14px;max-width:100%}
 .filecaprow:has(#fname:not([hidden])) .filecap{display:inline-flex}
 .filecapicon{display:inline-flex;color:#0b5c4c;flex:none}
@@ -1047,6 +1052,11 @@ HOME_TMPL = """<!doctype html><html lang="{lang}"><head><meta charset="utf-8">
 <span class="filebtnlike">{t[choose_file]}</span>
 </label>
 <p class="filecaprow"><span class="filecap"><span class="filecapicon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="3" width="13" height="10" rx="2"/><path d="M6.5 6.2v3.6L10 8z" fill="currentColor" stroke="none"/></svg></span><span class="filename" id="fname" hidden></span><button type="button" class="ghost small" id="rmfile" hidden>{t[remove]}</button></span></p>
+<div class="preview" id="preview" hidden>
+<video id="previewVideo" controls muted playsinline preload="metadata"></video>
+<p class="previewmeta"><span id="previewDur" hidden>{t[preview_duration]}: <span id="previewDurVal"></span></span> <span id="previewWarn" class="warn" hidden>{t[preview_over3]}</span></p>
+<p class="previewnote" id="previewNote" hidden>{t[preview_unavailable]}</p>
+</div>
 <label class="f" for="hintin">{t[hint_label]}</label>
 <div><input type="text" id="hintin" name="task_hint" maxlength="200" autocomplete="off" placeholder="{t[hint_ph]}"></div>
 <label class="f"><input type="checkbox" name="vote3" value="yes"> <b>{t[vote_label_t]}</b> <span class="hint">{t[vote_label_d]}</span></label>
@@ -1093,6 +1103,27 @@ rm.addEventListener('click',function(){{fi.value='';show();}});
 ['dragleave','drop'].forEach(function(ev){{dz.addEventListener(ev,function(e){{e.preventDefault();dz.classList.remove('over');}});}});
 dz.addEventListener('drop',function(e){{if(e.dataTransfer&&e.dataTransfer.files.length){{try{{fi.files=e.dataTransfer.files;}}catch(err){{}}show();}}}});
 show();
+</script>
+<script>
+(function(){{ // Local video preview: object URL only, never uploaded until Analyze.
+var pfi=document.getElementById('filein'),pv=document.getElementById('preview'),
+pvvid=document.getElementById('previewVideo'),pdur=document.getElementById('previewDur'),
+pdurval=document.getElementById('previewDurVal'),pwarn=document.getElementById('previewWarn'),
+pnote=document.getElementById('previewNote'),purl=null;
+function phide(){{if(purl){{URL.revokeObjectURL(purl);purl=null;}}
+pvvid.removeAttribute('src');pvvid.load();pvvid.hidden=false;pv.hidden=true;pdur.hidden=true;pwarn.hidden=true;pnote.hidden=true;}}
+function pshow(f){{phide();purl=URL.createObjectURL(f);pvvid.src=purl;pv.hidden=false;}}
+pfi.addEventListener('change',function(){{if(pfi.files.length){{pshow(pfi.files[0]);}}else{{phide();}}}});
+document.getElementById('rmfile').addEventListener('click',function(){{phide();}});
+document.getElementById('drop').addEventListener('drop',function(){{setTimeout(function(){{
+if(pfi.files.length){{pshow(pfi.files[0]);}}}},0);}});
+pvvid.addEventListener('loadedmetadata',function(){{var d=pvvid.duration;
+if(!isFinite(d)){{return;}}
+var m=Math.floor(d/60),s=Math.floor(d%60);
+pdurval.textContent=m+':'+(s<10?'0':'')+s;pdur.hidden=false;
+if(d>180){{pwarn.hidden=false;}}}});
+pvvid.addEventListener('error',function(){{pvvid.hidden=true;pnote.hidden=false;pdur.hidden=true;pwarn.hidden=true;}});
+}})();
 var dlg=document.getElementById('settingsDlg'),lastTrig=null;
 function syncDlg(){{document.getElementById('dlgStatus').innerHTML=document.getElementById('keywrap').innerHTML;
   document.getElementById('dlgErr').textContent='';}}

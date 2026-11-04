@@ -277,6 +277,16 @@ class WebRegressionTests(unittest.TestCase):
                 _, data = request(b"GET / HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
         return data.decode()
 
+    def test_home_has_local_video_preview(self):
+        html = self._get_home()
+        self.assertIn('id="previewVideo"', html)
+        self.assertIn("URL.createObjectURL", html)
+        self.assertIn("URL.revokeObjectURL", html)
+        self.assertIn("Duration:", html)
+        self.assertIn("Preview not available in this browser", html)
+        self.assertIn("the server only accepts up to 3 minutes", html)
+        self.assertIn("controls muted playsinline", html)
+
     def test_home_no_key_cta(self):
         html = self._get_home()
         self.assertIn("Upload a how-to video. Get back:", html)
@@ -304,7 +314,7 @@ class WebRegressionTests(unittest.TestCase):
         cleaned = html.lower().replace(".env.example", "")
         self.assertNotIn("example", cleaned)
         self.assertNotIn('name="example"', html)
-        self.assertIn("Turn a how-to video into a manual for people and step data for robots.", html)
+        self.assertIn("Turn a how-to video into a manual for <span class=\"hl\">people</span> and step data for <span class=\"hl\">robots</span>.", html)
         self.assertIn("Upload a short video &rarr; we split it into timed steps", html)
         self.assertIn("How it works", html)
         self.assertNotIn("Advanced:", html)
@@ -337,7 +347,8 @@ class WebRegressionTests(unittest.TestCase):
     def test_home_with_key_shows_analyze(self):
         html = self._get_home("sentinel-KEY-999")
         self.assertIn(">Analyze</button>", html)
-        self.assertIn("This analysis uses your Meta API credit (about US$0.02-0.03 for a 14s clip", html)
+        self.assertIn("<b>This analysis uses your Meta API credit</b>", html)
+        self.assertIn("about US$0.02-0.03 for a 14s clip", html)
         self.assertIn("includes full-resolution keyframes", html)
         self.assertNotIn("Set up your Meta API key to analyze", html)
         self.assertNotIn("sentinel-KEY-999", html)
@@ -674,7 +685,7 @@ class I18nTests(unittest.TestCase):
                              b"Host: x\r\nConnection: close\r\n\r\n")
         html = data.decode()
         self.assertIn('<html lang="en">', html)
-        self.assertIn("Turn a how-to video into a manual for people", html)
+        self.assertIn("Turn a how-to video into a manual for <span class=\"hl\">people</span>", html)
         self.assertIn("1. Pick a video", html)
         self.assertIn("How it works", html)
 
@@ -705,7 +716,9 @@ class I18nTests(unittest.TestCase):
         self.assertIn('?lang=ja', html)
         self.assertIn("localStorage.setItem('wolang'", html)
         self.assertIn('class="langsel"', html)
-        self.assertIn("🌐", html)
+        self.assertIn('class="langglobe"', html)
+        self.assertIn("<svg", html)
+        self.assertNotIn("🌐", html)
         self.assertIn("After: timed steps + manual", html)
 
     def test_model_output_note_shown(self):
