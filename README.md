@@ -4,8 +4,26 @@ Teaching video → 📘 manual for humans + 🤖 JSON for robots.
 For hackathon judges and makers: runs 100% on your machine, upload-first, every claim traceable to frames.
 Built during the Meta hackathon; demo AI is all Meta (Muse Spark, Muse Code).
 
-![Home page](app/web/design-review/round-13/home-1280.png)
-*(Screenshot from design round-13; v2 result: app/web/design-review/round-13/result-v2-1280.png.)*
+## Results
+
+- Default: prompt v6 + full-resolution keyframes, 3-run majority vote
+  optional (`app/eval/rounds.md` §"Default (post-W15)").
+- Held-out 4/7, single evaluation on frozen answers, no tuning on the set
+  (`app/eval/rounds.md` §"held-out (v6 x3 + vote...)").
+- Held-out2 6/10, frozen GT x10, 3 runs + strict-majority vote each, scored
+  once (`app/eval/rounds.md` §"heldout2-final").
+- Non-procedural clips return 0 steps (postfire-forest, N1, N3 — same
+  sections above).
+- Limits: up to 3 minutes / 100 MB per video.
+- Cost: 248 optimization calls ≈ US$8.52 (`app/eval/rounds.md`
+  §"heldout2-final" cumulative line); ≈ US$9 total across 250+ real paid
+  executions (usage-rate estimates, not bill reconciliation).
+- Top 3 limits: adjacent-step merging (H5/S1/S3, §"heldout2-final"), sub-1s
+  UI events (OBS/UI-B GT1 misses, §"F2-framealign"), look-alike assembly
+  parts merging (m1-0008, §"held-out").
+
+![Home page](app/web/design-review/final-1104/home-1280.png)
+*(Current web UI, 2026-11-04. Result page: app/web/design-review/final-1104/result-1280.png.)*
 
 Watch a how-to clip once. Get a human assembly manual with source frames,
 a validated operation JSON (`object/action/target/pre/done` + per-step evidence), a
@@ -38,6 +56,7 @@ Full zero-to-running guide with troubleshooting: `app/README.md` →
 
 ## Contents
 
+- [Results](#results)
 - [30-second start](#30-second-start-mock-free-no-api-key)
 - [Architecture](#architecture)
 - [What this repo contains](#what-this-repo-contains-built-during-the-event)
@@ -119,6 +138,9 @@ when you tick the credit checkbox; the server enforces the daily budget from
 `.env` (defaults 20 calls / US$1.00). Without a key, Analyze becomes a
 Settings button; the hero before/after is a static illustration only. The home page shows
 `Meta API key: configured / not configured` (status only, never the value).
+UI in 5 languages (English default, 繁體中文, 简体中文, 日本語, Español);
+model output stays in its original language. The UI runs real Meta
+inference only — there is no mock or demo mode in the interface.
 `provider=mock` remains in the CLI/MCP/tests for free automated checks.
 
 ## MCP
@@ -173,8 +195,9 @@ samples in `app/export/samples/`.
 - Physical assembly is never executed (no robot arm). The closed loop covers
   software artifacts only (assembly checklist); physical todos stay pending.
 - Navide plans were created via pane-relayed MCP; the standalone adapter has
-  never been live-verified. Observed API spend ≈ US$0.22 + US$0.60 reserves
-  as of 2026-11-03 (usage-rate estimates, not bill reconciliation).
+  never been live-verified. Observed API spend ≈ US$9 total across 250+
+  real paid executions (usage-rate estimates, not bill reconciliation);
+  early phase (2026-11-03) was ≈ US$0.22 + US$0.60 reserves.
 - Web UI + export + MCP test evidence: backend 75 pass, live e2e 19/19,
   unit suite 93/93, sha256 zero unexpected drift, 13 design-review rounds +
   real-browser walkthroughs (two paid Meta UI runs).
