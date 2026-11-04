@@ -97,7 +97,7 @@ def run(args):
             write_json(out / "repaired.json", {"repaired_step_ids": repaired,
                        "boundary_tolerance": forgiven,
                        "note": "Out-of-range frame refs dropped; flagged steps carry a needs_review evidence prefix. Refs within one sample interval are kept as boundary tolerance."})
-        validate_operations(document, schema, manifest, out)
+        validate_operations(document, schema, manifest, out, forgiven=forgiven)
         payload = plan_payload(document, manifest, args.workspace_path, args.lang)
         # No task payload or manual exists before both schema and semantic validation pass.
         write_json(out / "operations.json", document)

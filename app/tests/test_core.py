@@ -257,6 +257,29 @@ irrelevant log line
         self.assertEqual(repaired, ["s41"])
         self.assertTrue(doc["steps"][0]["evidence"].startswith("needs_review"))
 
+    def test_validator_accepts_boundary_tolerance_and_never_kills_run_on_ref(self):
+        # Real case: web-20261104T081028Z step-005 cited frame-000017 within
+        # +/-1 sample interval; repair forgave it but strict validation killed
+        # the whole run. 0.5s outside -> forgiven and passes; 3s outside ->
+        # dropped and flagged; neither kills the run.
+        from validation import repair_frame_refs
+        manifest, doc = self.fixture(self.base)
+        manifest["video_fps"] = "30/1"
+        manifest["sample_interval_ms"] = 1000
+        doc["steps"][1].update(start_ms=1500, end_ms=3000,
+                               source_frame_refs=["frame-000002"])
+        doc, repaired, forgiven = repair_frame_refs(doc, manifest)
+        self.assertEqual(repaired, [])
+        self.assertEqual(forgiven, {"compare": ["frame-000002"]})
+        validate_operations(doc, self.schema, manifest, self.base, forgiven=forgiven)
+        doc["steps"][1].update(start_ms=2500, end_ms=3000,
+                               source_frame_refs=["frame-000003", "frame-000001"],
+                               evidence="plain evidence")
+        doc, repaired, forgiven = repair_frame_refs(doc, manifest)
+        self.assertEqual(doc["steps"][1]["source_frame_refs"], ["frame-000003"])
+        self.assertTrue(doc["steps"][1]["evidence"].startswith("needs_review"))
+        validate_operations(doc, self.schema, manifest, self.base, forgiven=forgiven)
+
     def test_video_kind_gate_empty_steps_rules(self):
         manifest, doc = self.fixture(self.base)
         # non_procedural must have empty steps.

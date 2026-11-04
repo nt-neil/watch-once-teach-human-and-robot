@@ -19,6 +19,17 @@ def frame_tolerance_ms(manifest):
     return 40.0
 
 
+def sample_interval_ms(manifest, fallback):
+    """Keyframe sample interval; falls back when missing or invalid."""
+    try:
+        interval = float(manifest.get("sample_interval_ms", fallback))
+        if math.isfinite(interval) and interval > 0:
+            return interval
+    except (TypeError, ValueError):
+        pass
+    return fallback
+
+
 def clamp_document(document, manifest):
     """Clamp step boundaries into [0, duration]. Returns (doc, clamped_ids).
 
@@ -51,12 +62,7 @@ def repair_frame_refs(document, manifest):
     """
     frames = {frame["id"]: frame for frame in manifest["frames"]}
     tolerance = frame_tolerance_ms(manifest)
-    try:
-        interval = float(manifest.get("sample_interval_ms", tolerance))
-        if not math.isfinite(interval) or interval <= 0:
-            interval = tolerance
-    except (TypeError, ValueError):
-        interval = tolerance
+    interval = sample_interval_ms(manifest, tolerance)
     repaired = []
     forgiven_map = {}
     for step in document.get("steps", []):
@@ -123,7 +129,9 @@ def apply_shot_candidates(document, candidates):
     return document, aligned
 
 
-def validate_operations(document, schema, manifest, output_dir):
+def validate_operations(document, schema, manifest, output_dir, forgiven=None):
+    """forgiven: {step_id: [refs]} from repair_frame_refs; those refs are
+    legal within +/-1 sample interval of the step boundary."""
     Draft202012Validator.check_schema(schema)
     if next(Draft202012Validator(schema).iter_errors(document), None):
         # Do not echo untrusted model/fixture data in errors.
@@ -135,6 +143,8 @@ def validate_operations(document, schema, manifest, output_dir):
         raise AppError("Source duration is not finite.")
     frames = {frame["id"]: frame for frame in manifest["frames"]}
     tolerance = frame_tolerance_ms(manifest)
+    interval = sample_interval_ms(manifest, tolerance)
+    forgiven = forgiven or {}
     kind = document.get("video_kind", "procedural")
     if kind == "non_procedural" and document["steps"]:
         raise AppError("Non-procedural video must have empty steps.")
@@ -157,11 +167,13 @@ def validate_operations(document, schema, manifest, output_dir):
         if len(set(refs)) != len(refs):
             raise AppError("Frame references must be unique within a step.")
         flagged = step["evidence"].startswith("needs_review")
+        forgiven_refs = set(forgiven.get(step["id"], []))
         for ref in refs:
             if ref not in frames:
                 raise AppError("Step references a nonexistent source frame.")
             frame = frames[ref]
-            if not flagged and not start - tolerance <= frame["sample_time_ms"] < end + tolerance:
+            window = interval if ref in forgiven_refs else tolerance
+            if not flagged and not start - window <= frame["sample_time_ms"] < end + window:
                 raise AppError("Referenced sample is outside its step time range.")
             path = Path(output_dir) / frame["file"]
             if not path.is_file() or sha256(path) != frame["image_sha256"]:

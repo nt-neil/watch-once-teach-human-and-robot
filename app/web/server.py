@@ -1211,8 +1211,8 @@ function fail(msg){{
   if(lis[shown]){{lis[shown].className="fail";lis[shown].querySelector(".sic").textContent="✗";}}
 }}
 async function poll(){{
-  var j;try{{const r=await fetch("/api/job/{job}");j=await r.json();}}catch(e){{setTimeout(poll,1500);return;}}
-  if(!j||j.error){{fail("Unknown job.");return;}}
+  var j,r;try{{r=await fetch("/api/job/{job}");j=await r.json();}}catch(e){{setTimeout(poll,1500);return;}}
+  if(!j||!j.state||(r&&r.status===404)){{fail("Unknown job.");return;}}
   var prov=j.provider||"meta";
   if(j.started_at)t0=j.started_at*1000;
   var target=j.state==="done"?6:(IDX[j.stage]!=null?IDX[j.stage]:0);
