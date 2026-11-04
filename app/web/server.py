@@ -118,6 +118,23 @@ def request_lang(path):
     return "en"
 
 
+GITHUB_URL = "https://github.com/nt-neil/watch-once-teach-human-and-robot"
+GITHUB_SVG = ('<svg height="16" width="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">'
+              '<path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 '
+              '0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 '
+              '1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 '
+              '0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 '
+              '.27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 '
+              '3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 '
+              '8c0-4.42-3.58-8-8-8z"/></svg>')
+
+
+def github_link(t):
+    label = esc(t["github"])
+    return (f'<a class="ghlink" href="{GITHUB_URL}" target="_blank" rel="noopener" aria-label="{label}">'
+            f"{GITHUB_SVG}<span class=\"ghtext\">{label}</span></a>")
+
+
 def lang_switcher(cur, path):
     base = urlsplit(path).path or "/"
     links = []
@@ -775,11 +792,12 @@ h2{font-size:19px;margin:22px 0 8px}h3{font-size:16px;margin:16px 0 6px}
 .hintline{font-size:14px;color:#3d4a44;margin:4px 0}
 .warnline{font-size:14px;color:#8a4d00;font-weight:600;margin:4px 0}
 .langsw{font-size:13px;color:#5a6560}.langlink{color:#1a6fd4;text-decoration:none}.langcur{font-weight:700;color:#1c2420}
+.ghlink{color:#1a6fd4;text-decoration:none;font-size:13px;white-space:nowrap}.ghlink svg{vertical-align:-3px;margin-right:4px}.ghlink:hover{text-decoration:underline}
 .langsel{display:none;font-size:13px;max-width:110px}
 .langglobe{display:none}
 .brand{white-space:nowrap}
-.topnav{gap:8px;flex-wrap:nowrap}
-@media(max-width:480px){.langsw{display:none}.langsel{display:inline-block}.langglobe{display:inline}}
+.topnav{gap:8px;flex-wrap:nowrap}.topright{display:flex;gap:8px;align-items:center;white-space:nowrap}
+@media(max-width:480px){.langsw{display:none}.langsel{display:inline-block}.langglobe{display:inline}.ghlink .ghtext{display:none}.ghlink svg{margin-right:0}}
 .nrbadge{font-size:12px;font-weight:600;color:#8a4d00;background:#fff3e0;border:1px solid #e0a63f;border-radius:10px;padding:1px 8px;white-space:nowrap}
 .hero{display:grid;grid-template-columns:1.15fr .85fr;gap:20px;align-items:center;margin:2px 0 18px}
 @media(max-width:900px){.hero{grid-template-columns:1fr}}
@@ -928,7 +946,7 @@ footer{margin-top:28px;color:#3d4a44;font-size:13px}
 HOME_TMPL = """<!doctype html><html lang="{lang}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>{t[title_home]}</title>{css}</head>
 <body><main>
-<p class="topnav"><span class="brand">{t[brand]}</span>{langsw}<button type="button" class="textbtn" data-opendlg>{t[settings]}</button></p>
+<p class="topnav"><span class="brand">{t[brand]}</span><span class="topright">{langsw} · {ghlink} · <button type="button" class="textbtn" data-opendlg>{t[settings]}</button></span></p>
 <div class="hero">
 <div class="lede">
 <h1>{t[hero_title]}</h1>
@@ -973,7 +991,7 @@ HOME_TMPL = """<!doctype html><html lang="{lang}"><head><meta charset="utf-8">
 <ul class="chips"><li>{t[chip1]}</li><li>{t[chip2]}</li><li>{t[chip3]}</li></ul>
 </div>
 <div class="card scroll"><h2>{t[history_h2]}</h2>{history}</div>
-<footer>{t[footer]}</footer>
+<footer>{t[footer]} · {ghlink}</footer>
 </main>
 <dialog id="settingsDlg" aria-labelledby="dlgTitle">
 <form method="dialog" class="dlgclose"><button type="submit" aria-label="Close">×</button></form>
@@ -1140,7 +1158,7 @@ window.onload=poll;
 RESULT_TMPL = """<!doctype html><html lang="{lang}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>{t[result_title]} {run}</title>{css}</head>
 <body><main>
-<p class="topnav"><a href="/{langqs}">&larr; {t[home]}</a>{langsw}</p>
+<p class="topnav"><a href="/{langqs}">&larr; {t[home]}</a><span class="topright">{langsw} · {ghlink}</span></p>
 <h1>{t[result_title]}: {run}</h1>
 <p>{badges}</p>
 {hintline}
@@ -1630,7 +1648,7 @@ class Handler(BaseHTTPRequestHandler):
                                         key_status=key_status, cta=cta, showcase=SHOWCASE_RUN,
                                         csrf=_CSRF_TOKEN, t=t, lang=lang,
                                         langsw=lang_switcher(lang, self.path), langqs=langqs,
-                                        langjs=LANG_JS))
+                                        langjs=LANG_JS, ghlink=github_link(t)))
 
     def page_log_run(self, d):
         lang = request_lang(self.path)
@@ -1780,7 +1798,7 @@ class Handler(BaseHTTPRequestHandler):
                                           timeline=timeline, provelog=provelog, hintline=hintline,
                                           flagline=flagline, t=t, lang=lang,
                                           langsw=lang_switcher(lang, self.path), langqs=langqs,
-                                          langjs=LANG_JS))
+                                          langjs=LANG_JS, ghlink=github_link(t)))
 
     def do_POST(self):
         parts = urlsplit(self.path)
