@@ -147,9 +147,12 @@ def lang_switcher(cur, path):
         sel = " selected" if code == cur else ""
         opts.append(f'<option value="{code}"{sel}>{esc(label)}</option>')
     return ('<span class="langsw">' + " · ".join(links) + "</span>"
-            '<span class="langglobe" aria-hidden="true">🌐</span>'
+            '<span class="langcap"><span class="langglobe" aria-hidden="true">'
+            '<svg height="14" width="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">'
+            '<circle cx="8" cy="8" r="6.5"/><path d="M1.5 8h13M8 1.5c-4.5 4.2-4.5 8.8 0 13 4.5-4.2 4.5-8.8 0-13z"/>'
+            "</svg></span>"
             f'<select class="langsel" aria-label="Language" data-langbase="{esc(base)}">'
-            + "".join(opts) + "</select>")
+            + "".join(opts) + "</select></span>")
 
 
 LANG_JS = """<script>
@@ -325,6 +328,31 @@ def parse_multipart(body, boundary):
 def mid_ref(refs):
     """Middle cited frame: more representative than the step's first frame."""
     return refs[len(refs) // 2]
+
+
+def _s(ms):
+    """Display helper: milliseconds -> seconds string, one decimal. Display only."""
+    try:
+        return f"{float(ms) / 1000:.1f}"
+    except (TypeError, ValueError):
+        return "?"
+
+
+def _tcaps(st_ms, en_ms):
+    """Display helper: shared time capsule for both columns. Display only."""
+    return f"<code class=\"tcaps\">{_s(st_ms)}–{_s(en_ms)} s</code>"
+
+
+def _ellipsize(text, limit):
+    """Display helper: append … only when the text was cut. Display only."""
+    return text if len(text) <= limit else text[:limit].rstrip() + "…"
+
+
+def _display_name(raw):
+    """Display helper: strip the upload timestamp prefix and -upload suffix. Display only."""
+    name = scrub_video_name(raw)
+    name = re.sub(r"^\d+_", "", name)
+    return re.sub(r"-upload(?=\.[^.]+$|$)", "", name)
 
 
 def frame_file_for(run_dir, ref_id):
@@ -791,18 +819,24 @@ h2{font-size:19px;margin:22px 0 8px}h3{font-size:16px;margin:16px 0 6px}
 .step .ev{color:#3d4a44}
 .hintline{font-size:14px;color:#3d4a44;margin:4px 0}
 .warnline{font-size:14px;color:#8a4d00;font-weight:600;margin:4px 0}
-.langsw{font-size:13px;color:#5a6560}.langlink{color:#1a6fd4;text-decoration:none}.langcur{font-weight:700;color:#1c2420}
-.ghlink{color:#1a6fd4;text-decoration:none;font-size:13px;white-space:nowrap}.ghlink svg{vertical-align:-3px;margin-right:4px}.ghlink:hover{text-decoration:underline}
-.langsel{display:none;font-size:13px;max-width:110px}
-.langglobe{display:none}
+.langsw{font-size:13px;color:#5a6560}.langlink{color:#155fc0;text-decoration:none}.langcur{font-weight:700;color:#1c2420}
+.ghlink{color:#155fc0;text-decoration:none;font-size:13px;white-space:nowrap}.ghlink svg{vertical-align:-3px;margin-right:4px}.ghlink:hover{text-decoration:underline}
+.langsel{display:inline-block;font-size:13px;max-width:110px;appearance:none;-webkit-appearance:none;border:1px solid #d8dee6;border-radius:99px;padding:3px 24px 3px 10px;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M1 1l3 3 3-3' fill='none' stroke='%233d4a44' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 9px center;color:#3d4a44;cursor:pointer}
+.langcap{position:relative;display:inline-flex;align-items:center}
+.langcap .langglobe{position:absolute;left:9px;pointer-events:none}
+.langglobe{display:inline-flex;color:#3d4a44;vertical-align:-2px;margin-right:2px}
+.langcap .langsel{padding-left:27px}
+.langsw{display:none}
 .brand{white-space:nowrap}
 .topnav{gap:8px;flex-wrap:nowrap}.topright{display:flex;gap:8px;align-items:center;white-space:nowrap}
-@media(max-width:480px){.langsw{display:none}.langsel{display:inline-block}.langglobe{display:inline}.ghlink .ghtext{display:none}.ghlink svg{margin-right:0}}
+@media(max-width:480px){.ghlink .ghtext{display:none}.ghlink svg{margin-right:0}
+.topnav{padding:8px 0}.topnav .brand{padding:8px 0}.langsel{max-width:none}}
 .nrbadge{font-size:12px;font-weight:600;color:#8a4d00;background:#fff3e0;border:1px solid #e0a63f;border-radius:10px;padding:1px 8px;white-space:nowrap}
-.hero{display:grid;grid-template-columns:1.15fr .85fr;gap:20px;align-items:center;margin:2px 0 18px}
+.hero{display:grid;grid-template-columns:1.15fr .85fr;gap:24px;align-items:center;margin:36px 0 20px}
 @media(max-width:900px){.hero{grid-template-columns:1fr}}
-.hero h1{font-size:30px}
-.beforeafter{display:grid;grid-template-columns:1fr auto 1.3fr;gap:12px;align-items:center;margin-top:12px}
+.hero h1{font-size:56px;font-weight:700;letter-spacing:-0.02em;line-height:1.05}
+@media(max-width:640px){.hero h1{font-size:36px}}
+.beforeafter{display:grid;grid-template-columns:1fr auto 1.3fr;gap:12px;align-items:center;margin-top:12px;background:#ffffff;border:1px solid #d8dee6;border-radius:12px;padding:16px;box-shadow:0 8px 28px rgba(26,36,32,.10)}
 .hero .beforeafter{margin-top:0}
 @media(max-width:700px){.beforeafter{gap:8px}.basteps img{width:56px;height:42px}.basteps li{font-size:12.5px}.ba figcaption{font-size:11px}}
 .ba{margin:0}
@@ -810,13 +844,22 @@ h2{font-size:19px;margin:22px 0 8px}h3{font-size:16px;margin:16px 0 6px}
 .ba figcaption{font-size:12.5px;color:#3d4a44;margin-top:6px}
 .balead{font-weight:700;margin:0 0 6px}
 .basteps{list-style:none;margin:0;padding:0}
-.basteps li{display:flex;gap:10px;align-items:center;margin:8px 0;font-size:13.5px;min-width:0}
+.basteps li{display:flex;gap:10px;align-items:center;margin:8px 0;font-size:13.5px;min-width:0;animation:ba-in .5s ease-out backwards}
+.basteps li:nth-child(2){animation-delay:.25s}.basteps li:nth-child(3){animation-delay:.5s}
+.basteps li:nth-child(2) .batime{animation:ba-glow .4s ease-out .7s backwards}
+.basteps li:nth-child(3) .batime{animation:ba-glow .4s ease-out .9s backwards}
+.basteps li:nth-child(1) .batime{animation:ba-glow .4s ease-out .45s backwards}
+@keyframes ba-in{from{opacity:0}}
+@keyframes ba-glow{from{background:#0b5c4c;color:#fff}}
+.basteps li b{white-space:nowrap}
+.basteps li .batime{display:inline-block;background:#e3efe9;color:#0b5c4c;border-radius:99px;padding:0 8px;font-size:12px;white-space:nowrap}
 .basteps img{width:88px;height:66px;object-fit:cover;border-radius:4px;border:1px solid #d8dee6;flex:none}
-.basrc{font-size:12.5px;color:#3d4a44;margin:8px 0 0}
+.basrc{font-size:14px;font-weight:600;color:#1a2420;margin:10px 0 0}
 details.advlog{margin-top:12px}
 .keyline{margin-top:12px;border-top:1px solid #d8dee6;padding-top:8px}
 details.advlog summary{cursor:pointer;font-weight:600;color:#3d4a44}
-.hero .lede{margin:0}
+.hero .lede{margin:20px 0 0}
+.hero .lede .sub{font-size:20px;color:#5a6560;text-wrap:balance;max-width:40ch}
 .hero .beforeafter{min-width:0}
 
 .pipe{display:flex;align-items:stretch;gap:0;margin:10px 0 4px;flex-wrap:wrap}
@@ -831,21 +874,38 @@ details.advlog summary{cursor:pointer;font-weight:600;color:#3d4a44}
 .getback-lede{font-weight:700;margin:2px 0 6px;font-size:15px}
 .gbgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:8px 0}
 @media(max-width:700px){.gbgrid{grid-template-columns:1fr 1fr}}
-.gb{background:#f4faf7;border:1px solid #d8dee6;border-radius:8px;padding:10px;font-size:13px;color:#3d4a44;min-width:0}
+.gb{background:#f4faf7;border:1px solid #d8dee6;border-radius:8px;padding:12px;font-size:13px;color:#3d4a44;min-width:0}
 .gb .gbn{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:99px;background:#0b5c4c;color:#fff;font-size:12px;font-weight:700;margin-right:6px}
 .gb b{display:block;color:#1a2420;margin:6px 0 2px;font-size:13.5px}
 .fitnote,.limitnote{font-size:13.5px;color:#3d4a44;margin:8px 0 0}
-.drop{display:block;border:2px dashed #9aa6b2;border-radius:10px;padding:22px 18px;text-align:center;background:#fafcfb;margin-top:12px;cursor:pointer}
-.drop.over{border-color:#0b5c4c;background:#e3efe9}
+.fitnote{background:#eef6f1;border:1px solid #bcd4c9;border-radius:8px;padding:8px 12px}
+.fiticon{color:#0b5c4c;font-weight:700;margin-right:2px}
+.limitnote{background:#fff3e0;border:1px solid #e0a63f;border-radius:8px;padding:8px 12px;color:#5a3a00}
+.limiticon{font-weight:700;margin-right:2px}
+.drop{display:block;border:3px dashed #9aa6b2;border-radius:14px;padding:40px 20px;text-align:center;background:linear-gradient(180deg,#f2f8f4,#fafcfb);margin-top:12px;cursor:pointer;transition:border-color 150ms,background 150ms,box-shadow 150ms}
+.drop:hover{animation:dropulse 1.6s ease-in-out infinite}
+@keyframes dropulse{50%{box-shadow:0 0 0 6px rgba(11,92,76,.14)}}
+.drop:hover{border-color:#0b5c4c;background:#f0f7f3;box-shadow:0 4px 18px rgba(11,92,76,.12)}
+.drop.over{border-color:#0b5c4c;background:#e3efe9;box-shadow:0 4px 22px rgba(11,92,76,.20)}
 .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-.dropicon{display:block;font-size:30px;color:#0b5c4c;line-height:1}
+.dropicon{display:block;font-size:44px;color:#0b5c4c;line-height:1}
 .dropmsg{display:block;margin:8px 0 10px;font-size:14px;color:#3d4a44}
 .filebtnlike{display:inline-block;font-size:15px;font-weight:600;padding:8px 22px;background:#ffffff;color:#0b5c4c;border:2px solid #0b5c4c;border-radius:6px}
-.filename{font-size:14px;margin:10px 0 0;overflow-wrap:break-word}
+.filename{font-size:14px;overflow-wrap:break-word;min-width:0}
+.filecaprow{margin:10px 0 0}
+.filecap{display:none;align-items:center;gap:10px;background:#eef6f1;border:1px solid #bcd4c9;border-radius:99px;padding:6px 8px 6px 14px;max-width:100%}
+.filecaprow:has(#fname:not([hidden])) .filecap{display:inline-flex}
+.filecapicon{display:inline-flex;color:#0b5c4c;flex:none}
+.filecap #rmfile{margin-top:0;flex:none}
+.tcaps{white-space:nowrap}
+.hl{background:linear-gradient(transparent 58%,#cfe3d8 58%,#cfe3d8 94%,transparent 94%);padding:0 1px}
 
 button.small{font-size:13px;padding:6px 14px;margin-top:8px}
 button.textbtn{background:none;border:none;padding:0;margin:0;color:#0b5c4c;font:inherit;font-size:inherit;cursor:pointer;text-decoration:underline}
-label.f{display:block;margin:12px 0 4px;font-weight:600}
+label.f{display:block;margin:12px 0 4px;font-weight:400;font-size:14px}
+label.f .hint{color:#3d4a44}
+.keycaps{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;font-size:13px}
+.keycap{display:inline-block;background:#e3efe9;color:#1a2420;border:1px solid #bcd4c9;border-radius:99px;padding:3px 12px;white-space:nowrap}
 .selwrap{position:relative;display:block}
 .selwrap select{appearance:none;-webkit-appearance:none;font-size:15px;padding:9px 34px 9px 12px;border:1px solid #9aa6b2;border-radius:6px;background:#fff;color:#1a2420;width:100%;cursor:pointer}
 .selwrap::after{content:"▾";position:absolute;right:12px;top:50%;transform:translateY(-50%);color:#3d4a44;pointer-events:none}
@@ -856,7 +916,7 @@ button.big{font-size:17px;padding:13px 30px}
 button.ghost{background:#fff;color:#0b5c4c;border:2px solid #0b5c4c;padding:6px 14px;font-size:14px}
 button.ghost:hover{background:#e3efe9}
 .btnrow{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-:focus-visible{outline:3px solid #0b5c4c;outline-offset:2px}
+:focus-visible{outline:3px solid #0b5c4c;outline-offset:3px;border-radius:4px;box-shadow:0 0 0 5px rgba(11,92,76,.18)}
 .cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .cols>*{min-width:0}
 @media(max-width:900px){.cols{grid-template-columns:1fr}}
@@ -874,20 +934,26 @@ button.ghost:hover{background:#e3efe9}
 table{border-collapse:collapse;width:100%;font-size:14px;min-width:560px}
 th,td{border:1px solid #d8dee6;padding:6px 10px;text-align:left}
 th{background:#edefec;color:#1a2420}
-.step{display:flex;gap:12px;border:1px solid #d8dee6;border-radius:8px;padding:10px;margin:10px 0;cursor:pointer;transition:border-color 120ms,background 120ms}
+.step{display:flex;gap:12px;border:1px solid #d8dee6;border-radius:8px;padding:10px 12px;margin:8px 0;cursor:pointer;transition:border-color 120ms,background 120ms;line-height:1.4}
+.step .t br{content:"";display:block;margin-top:2px}
+.step .t button.ghost{margin-top:2px;padding:4px 12px;font-size:13px}
+.step details{margin-top:4px}
 .step:hover{border-color:#0b5c4c}
 .step.sel{border-color:#0b5c4c;background:#e3efe9}
 .step img{width:132px;height:99px;object-fit:cover;border-radius:4px;border:1px solid #d8dee6;flex:none}
 .step .t b{font-size:15px}.step .t{font-size:13.5px;color:#3d4a44;min-width:0}
 .step .t code{font-size:12px}
-.step details{margin-top:6px}
 .step pre{font-size:12px;max-height:220px}
 .badge{display:inline-block;font-size:12px;font-weight:700;border-radius:99px;padding:2px 10px;margin-right:6px}
 .badge.live{background:#d3e7d8;color:#166534}.badge.sample{background:#fbdfb9;color:#8a4d00}
 .badge.n{background:#e3efe9;color:#0b5c4c}
-.stages{list-style:none;margin:6px 0 0;padding:0}
+.stages{list-style:none;margin:6px 0 0;padding:0 0 0 4px}
 .stages li{position:relative;display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:8px;overflow:hidden}
 .stages li+li{margin-top:4px}
+.stages li::before{content:"";position:absolute;left:24px;top:40px;bottom:-6px;width:3px;background:#d8dee6;border-radius:2px}
+.stages li:last-child::before{display:none}
+.stages li.done::before{background:#0b5c4c}
+.stages li.active::before{background:linear-gradient(#0b5c4c,#d8dee6)}
 .stages .sic{flex:none;width:26px;height:26px;border-radius:99px;border:2px solid #9aa6b2;color:#3d4a44;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;background:#fff}
 .stages li.done .sic{background:#0b5c4c;border-color:#0b5c4c;color:#fff}
 .stages li.active{background:#e3efe9}
@@ -898,7 +964,9 @@ th{background:#edefec;color:#1a2420}
 .stages .sbody{min-width:0}
 .stages .sbody b{font-size:15px}
 .stages .sdetail{margin:2px 0 0;font-size:13px;color:#3d4a44;overflow-wrap:break-word}
-.stages li.wait{opacity:.75}
+.stages li.wait{opacity:.55}
+.stages li.wait .sic{border-style:dashed}
+.stages li.active{box-shadow:0 2px 12px rgba(11,92,76,.18)}
 @keyframes pulse{50%{opacity:.45}}
 @keyframes sweep{from{transform:translateX(-110%)}to{transform:translateX(320%)}}
 @keyframes pop{from{opacity:0;transform:translateY(10px)}}
@@ -917,6 +985,8 @@ a.cta{display:inline-block;font-size:15px;font-weight:700;padding:10px 22px;back
 .errlinks a{display:inline-block;font-size:14px;font-weight:700;padding:8px 18px;border-radius:6px;text-decoration:none;margin-right:8px;background:#0b5c4c;color:#fff!important}
 .errlinks a:last-child{background:#fff;color:#0b5c4c!important;border:2px solid #0b5c4c}
 .elapsedline{font-size:14px;color:#3d4a44}
+.jobmeta{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 12px}
+.jobcap{display:inline-block;font-size:13px;background:#eef6f1;border:1px solid #bcd4c9;border-radius:99px;padding:3px 12px;color:#1a2420}
 
 .errlinks{margin:10px 0;font-size:15px}
 #alog{max-height:220px;overflow:auto}
@@ -932,14 +1002,18 @@ dialog h2{margin:0 0 8px}
 .tl li::after{content:"";position:absolute;left:2px;top:6px;width:10px;height:10px;border-radius:99px;background:#fff;border:3px solid #0b5c4c}
 .tl li:hover::after{background:#0b5c4c}
 .tl li.sel{background:#e3efe9}
-.tl img{width:64px;height:48px;object-fit:cover;border-radius:4px;border:1px solid #d8dee6;vertical-align:middle;margin-right:8px}
-.tl .tt{font-size:13.5px}.tl .tt b{font-size:14px}.tl code{font-size:12px}
+.tl img{width:96px;height:72px;object-fit:cover;border-radius:6px;border:1px solid #d8dee6;vertical-align:middle;margin-right:10px}
+.tl .tt{font-size:14px}.tl .tt b{font-size:16px}
+.tl code{font-size:12px;background:#e3efe9;color:#0b5c4c;border-radius:99px;padding:1px 10px;white-space:nowrap}
+.tl li::after{width:12px;height:12px;left:1px}
+.step .ev{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 details.provenance{margin-top:10px}
 details.provenance summary{cursor:pointer;font-weight:600}
 .ok{color:#166534;font-weight:700}.warn{color:#8a4d00;font-weight:700}.err{color:#b42318;font-weight:700}
 .mono{font-family:"Plex Mono",ui-monospace,SFMono-Regular,monospace;font-size:13px}
 a{color:#0b5c4c}
 footer{margin-top:28px;color:#3d4a44;font-size:13px}
+.runid{font-size:12.5px;color:#5a6560;margin:-2px 0 8px;overflow-wrap:break-word}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 </style>"""
 
@@ -949,7 +1023,7 @@ HOME_TMPL = """<!doctype html><html lang="{lang}"><head><meta charset="utf-8">
 <p class="topnav"><span class="brand">{t[brand]}</span><span class="topright">{langsw} · {ghlink} · <button type="button" class="textbtn" data-opendlg>{t[settings]}</button></span></p>
 <div class="hero">
 <div class="lede">
-<h1>{t[hero_title]}</h1>
+<h1>{t[hero_title_html]}</h1>
 <p class="sub">{t[hero_sub]}</p>
 <p><a class="btnlink" href="#pick">{t[hero_cta]}</a></p>
 </div>
@@ -964,19 +1038,18 @@ HOME_TMPL = """<!doctype html><html lang="{lang}"><head><meta charset="utf-8">
 <div class="gb"><span class="gbn">3</span><b>{t[gb3t]}</b><span>{t[gb3s]}</span></div>
 <div class="gb"><span class="gbn">4</span><b>{t[gb4t]}</b><span>{t[gb4s]}</span></div>
 </div>
-<p class="fitnote">{t[fitnote]}</p>
-<p class="limitnote">{t[limitnote]}</p>
+<p class="fitnote"><span class="fiticon" aria-hidden="true">✓</span> {t[fitnote_v2]}</p>
+<p class="limitnote"><span class="limiticon" aria-hidden="true">⚠</span> {t[limitnote]}</p>
 <label class="drop" id="drop" for="filein">
 <input type="file" name="video" id="filein" class="vh" accept="video/*,.mov,.mkv,.avi,.flv,.wmv,.ts,.mts,.m2ts,.3gp,.ogv,.gif">
 <span class="dropicon" aria-hidden="true">⇪</span>
 <span class="dropmsg">{t[drop_msg]}</span>
 <span class="filebtnlike">{t[choose_file]}</span>
 </label>
-<p class="filename" id="fname" hidden></p>
-<p><button type="button" class="ghost small" id="rmfile" hidden>{t[remove]}</button></p>
+<p class="filecaprow"><span class="filecap"><span class="filecapicon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="3" width="13" height="10" rx="2"/><path d="M6.5 6.2v3.6L10 8z" fill="currentColor" stroke="none"/></svg></span><span class="filename" id="fname" hidden></span><button type="button" class="ghost small" id="rmfile" hidden>{t[remove]}</button></span></p>
 <label class="f" for="hintin">{t[hint_label]}</label>
 <div><input type="text" id="hintin" name="task_hint" maxlength="200" autocomplete="off" placeholder="{t[hint_ph]}"></div>
-<label class="f"><input type="checkbox" name="vote3" value="yes"> {t[vote_label]}</label>
+<label class="f"><input type="checkbox" name="vote3" value="yes"> <b>{t[vote_label_t]}</b> <span class="hint">{t[vote_label_d]}</span></label>
 {cta}
 <div class="keyline">
 {key_status}
@@ -1048,10 +1121,10 @@ document.getElementById('dlgClearForm').addEventListener('submit',function(e){{e
 
 JOB_TMPL = """<!doctype html><html lang="{lang}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>{t[job_title]} {job}</title>{css}</head>
-<body><main><p class="topnav"><a href="/{langqs}">&larr; {t[home]}</a>{langsw}</p><h1 id="title">{t[job_title]}</h1>
-<p class="sub mono">{job}</p>
-<p class="elapsedline" id="provline">{t[provider]}: &hellip;</p>
-<p class="elapsedline">{t[elapsed]} <b id="elapsed">0.0s</b></p>
+<body><main><p class="topnav"><a href="/{langqs}">&larr; {t[home]}</a><span class="topright">{langsw}</span></p><h1 id="title">{t[job_title]}</h1>
+<div class="jobmeta"><span class="jobcap mono">{job}</span>
+<span class="jobcap" id="provline">{t[provider]}: &hellip;</span>
+<span class="jobcap">{t[elapsed]} <b id="elapsed">0.0s</b></span></div>
 <div class="card"><ol class="stages" id="stages">
 <li class="wait"><span class="sic">1</span><div class="sbody"><b>{t[checking_video]}</b><p class="sdetail"></p></div></li>
 <li class="wait"><span class="sic">2</span><div class="sbody"><b>{t[extracting_frames]}</b><p class="sdetail"></p></div></li>
@@ -1159,11 +1232,12 @@ RESULT_TMPL = """<!doctype html><html lang="{lang}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>{t[result_title]} {run}</title>{css}</head>
 <body><main>
 <p class="topnav"><a href="/{langqs}">&larr; {t[home]}</a><span class="topright">{langsw} · {ghlink}</span></p>
-<h1>{t[result_title]}: {run}</h1>
+<h1>{t[result_title]}: {videoname}</h1>
+<p class="runid">{run}</p>
 <p>{badges}</p>
 {hintline}
 {flagline}
-<p class="sub">{meta}</p>
+{metaline}
 <div class="cols">
 <div class="card manual pane"><h2>{t[human_manual]}</h2>
 <p class="sub">{t[model_output_note]}</p>
@@ -1439,7 +1513,7 @@ def beforeafter_html(t):
                            s.get("concept", {}).get("action", "?")))
         lis = "".join(
             f'<li><img alt="{esc(sid)}" src="/frames/{SHOWCASE_RUN}/{esc(fn)}" loading="lazy">'
-            f'<span><b>{esc(sid)} · {esc(span)}</b><br>{esc(action)}</span></li>'
+            f'<span><b>{esc(sid)}</b> <span class="batime">{esc(span)}</span><br>{esc(action)}</span></li>'
             for fn, sid, span, action in thumbs)
         model = ""
         try:
@@ -1625,21 +1699,21 @@ class Handler(BaseHTTPRequestHandler):
         last4 = masked_last4()
         if last4:
             key_status = ('<div id="keywrap">'
-                          f'<p class="mono">Meta API key: <b class="ok">{t["status_configured"]} · {esc(last4)}</b> '
-                          f'<button type="button" class="textbtn" data-opendlg>{t["set_up"]}</button>'
-                          f' · {budget}</p></div>')
+                          f'<p class="keycaps"><span class="keycap">Meta API key: <b class="ok">{t["status_configured"]} · {esc(last4)}</b></span>'
+                          f'<span class="keycap">{budget}</span> '
+                          f'<button type="button" class="textbtn" data-opendlg>{t["set_up"]}</button></p></div>')
         else:
             setup_html = t["setup_text"].format(
                 export="<code>export META_API_KEY=…</code>", env="<code>.env.example</code>",
                 envfile="<code>.env</code>",
                 dlg=f'<button type="button" class="textbtn" data-opendlg>{t["settings_dialog"]}</button>')
             key_status = ('<div id="keywrap">'
-                          f'<p class="mono">Meta API key: <b class="warn">{t["not_configured"]}</b> '
-                          f'<button type="button" class="textbtn" data-opendlg>{t["set_up"]}</button>'
-                          f' · {budget}</p>'
+                          f'<p class="keycaps"><span class="keycap">Meta API key: <b class="warn">{t["not_configured"]}</b></span>'
+                          f'<span class="keycap">{budget}</span> '
+                          f'<button type="button" class="textbtn" data-opendlg>{t["set_up"]}</button></p>'
                           f'<p class="sub">{setup_html}</p></div>')
         if last4:
-            cta = (f'<label class="f"><input type="checkbox" name="confirm" value="yes"> {t["confirm_cost"]}</label>'
+            cta = (f'<label class="f"><input type="checkbox" name="confirm" value="yes"> <b>{t["confirm_cost_t"]}</b> <span class="hint">{t["confirm_cost_d"]}</span></label>'
                    f'<div class="btnrow"><button type="submit" class="big">{t["analyze"]}</button></div>')
         else:
             cta = (f'<div class="btnrow"><button type="button" class="big" data-opendlg>{t["setup_cta"]}</button></div>')
@@ -1707,9 +1781,10 @@ class Handler(BaseHTTPRequestHandler):
         badges = (f"<span class=\"badge {'sample' if is_mock else 'live'}\">"
                   f"{'SAMPLE' if is_mock else 'META'}</span>"
                   f"<span class=\"badge n\">{len(steps)} steps</span>")
-        meta = esc(src.get('video_name', '?'))
-        if is_mock:
-            meta += " — sample output from the built-in fixture (no model call)"
+        meta = (" — sample output from the built-in fixture (no model call)"
+                if is_mock else "")
+        metaline = (f"<p class=\"runid\">{esc(d.name)} · {esc(_display_name(src.get('video_name', d.name)))}{meta}</p>"
+                    if is_mock else "")
         try:
             prov = json.loads((d / "provider-result.json").read_text())
             hint = (prov.get("metadata", {}) or {}).get("task_hint") or ""
@@ -1731,8 +1806,8 @@ class Handler(BaseHTTPRequestHandler):
                 f"<div class=\"step\" data-step=\"{i}\">{img}<div class=\"t\">"
                 f"<b>{t['step']} {i} · {esc(c.get('action', '?')[:60])}</b>{nr}<br>"
                 f"{esc(c.get('object', '?')[:80])} &rarr; {esc(c.get('target', '?')[:80])}<br>"
-                f"<small class=\"ev\">{t['evidence']}: {esc(str(s.get('evidence') or t['not_recorded'])[:140])}</small><br>"
-                f"<code>{s.get('start_ms', '?')}–{s.get('end_ms', '?')} ms</code> "
+                f"<small class=\"ev\">{t['evidence']}: {esc(_ellipsize(str(s.get('evidence') or t['not_recorded']), 140))}</small><br>"
+                f"{_tcaps(s.get('start_ms'), s.get('end_ms'))} "
                 f"<button type=\"button\" class=\"ghost\" data-copy=\"stepjson-{i}\">{t['copy_json']}</button>"
                 f"<details><summary>{t['step_json']}</summary><pre id=\"stepjson-{i}\">"
                 f"{esc(clean_path_text(json.dumps(s, ensure_ascii=False)[:3000]))}</pre></details>"
@@ -1752,7 +1827,7 @@ class Handler(BaseHTTPRequestHandler):
                 plain = plain[:107].rsplit(" ", 1)[0] + "…"
             tl.append(
                 f"<li data-step=\"{i}\">{img}<span class=\"tt\">"
-                f"<b>Step {i}</b> <code>{s.get('start_ms', '?')}–{s.get('end_ms', '?')} ms</code><br>"
+                f"<b>Step {i}</b> {_tcaps(s.get('start_ms'), s.get('end_ms'))}<br>"
                 f"{esc(plain)}</span></li>")
         timeline = "\n".join(tl)
         nav_path = d / "navide-plan.json"
@@ -1792,7 +1867,7 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, OSError) as exc:
             export_preview = f"<p>Export unavailable: {esc(clean_path_text(exc))}</p>"
         langqs = f"?lang={lang}" if lang != "en" else ""
-        self.send_html(RESULT_TMPL.format(css=CSS, run=esc(d.name), meta=meta, manual=manual,
+        self.send_html(RESULT_TMPL.format(css=CSS, run=esc(d.name), videoname=esc(_display_name(src.get("video_name", d.name))), metaline=metaline, manual=manual,
                                           ops=ops, navide_summary=navide_summary, payload=payload, verdict=verdict,
                                           export_preview=export_preview, badges=badges, cards=cards_html,
                                           timeline=timeline, provelog=provelog, hintline=hintline,
