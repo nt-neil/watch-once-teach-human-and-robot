@@ -1,4 +1,5 @@
 import math
+import re
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
@@ -43,11 +44,21 @@ def repair_frame_refs(document, manifest):
     Refs pointing at nonexistent frames are dropped the same way. When every
     ref is dropped, the closest one is kept so the step still cites evidence.
     Flagged steps get a "needs_review ..." evidence prefix (same convention
-    as scripts/vote.py). Returns (doc, repaired_step_ids).
+    as scripts/vote.py). Refs within one sample interval of the boundary are
+    kept as boundary tolerance (the model reads frame-NN as second NN) and
+    recorded in the returned forgiven map ({step_id: [refs]}), never flagged.
+    Returns (doc, repaired_step_ids, forgiven_map).
     """
     frames = {frame["id"]: frame for frame in manifest["frames"]}
     tolerance = frame_tolerance_ms(manifest)
+    try:
+        interval = float(manifest.get("sample_interval_ms", tolerance))
+        if not math.isfinite(interval) or interval <= 0:
+            interval = tolerance
+    except (TypeError, ValueError):
+        interval = tolerance
     repaired = []
+    forgiven_map = {}
     for step in document.get("steps", []):
         start, end = step["start_ms"], step["end_ms"]
         kept, dropped = [], []
@@ -57,6 +68,15 @@ def repair_frame_refs(document, manifest):
                 dropped.append(ref)
             else:
                 kept.append(ref)
+        if dropped:
+            forgiven = [r for r in dropped if r in frames
+                        and start - interval <= frames[r]["sample_time_ms"] < end + interval]
+            if forgiven:
+                kept = sorted(set(kept + forgiven),
+                              key=lambda r: step["source_frame_refs"].index(r))
+                dropped = [r for r in dropped if r not in forgiven]
+                step["source_frame_refs"] = kept
+                forgiven_map[step["id"]] = forgiven
         if not dropped:
             continue
         existing = [r for r in dropped if r in frames]
@@ -72,7 +92,35 @@ def repair_frame_refs(document, manifest):
         if not step["evidence"].startswith("needs_review"):
             step["evidence"] = f"needs_review (frame ref out of range, {note}): {step['evidence']}"
         repaired.append(step["id"])
-    return document, repaired
+    return document, repaired, forgiven_map
+
+
+def apply_shot_candidates(document, candidates):
+    """Rewrite step starts from [trans:ID] evidence markers (v10/F2).
+
+    The model cites a local pixel-difference candidate per step; the exact
+    t_ms replaces the model's guessed start. Unknown IDs flag the step
+    instead of rewriting; [trans:new] and unmarked steps pass through.
+    Returns (doc, aligned_step_ids).
+    """
+    by_id = {c["id"]: c["t_ms"] for c in candidates}
+    aligned = []
+    for step in document.get("steps", []):
+        match = re.search(r"\[trans:(\w+)\]", step.get("evidence", ""))
+        if not match or match.group(1) == "new":
+            continue
+        try:
+            cid = int(match.group(1))
+        except ValueError:
+            cid = match.group(1)
+        if cid not in by_id:
+            if not step["evidence"].startswith("needs_review"):
+                step["evidence"] = ("needs_review (unknown trans id "
+                                    f"{match.group(1)}): {step['evidence']}")
+            continue
+        step["start_ms"] = by_id[cid]
+        aligned.append(step["id"])
+    return document, aligned
 
 
 def validate_operations(document, schema, manifest, output_dir):

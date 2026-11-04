@@ -46,11 +46,64 @@ class CoreTests(unittest.TestCase):
         probe = {"streams": [{"codec_type": "video", "index": 0, "duration": "3", "time_base": "1/1000"}],
                  "format": {"duration": "3", "format_name": "mov,mp4"}}
         self.assertEqual(check_probe(probe)[1], 3000)
-        for bad in ({**probe, "streams": []}, {**probe, "format": {"duration": "61"}},
-                    {**probe, "format": {"duration": "nan"}}, {**probe, "format": {}},
-                    {**probe, "streams": [{"codec_type": "audio"}]}):
+        for bad in ({**probe, "streams": []}, {**probe, "format": {"duration": "nan"}},
+                    {**probe, "format": {}}, {**probe, "streams": [{"codec_type": "audio"}]}):
             with self.subTest(bad=bad), self.assertRaises(AppError):
                 check_probe(bad)
+
+    def test_probe_accepts_180s_and_rejects_beyond_in_plain_words(self):
+        # 60s was our own cap, not the API's; UI/README promise ~3 minutes.
+        for ok in ("61", "120", "180"):
+            probe = {"streams": [{"codec_type": "video", "index": 0, "duration": ok}],
+                     "format": {"duration": ok, "format_name": "mov,mp4"}}
+            self.assertEqual(check_probe(probe)[1], int(float(ok) * 1000))
+        probe = {"streams": [{"codec_type": "video", "index": 0, "duration": "181"}],
+                 "format": {"duration": "181", "format_name": "mov,mp4"}}
+        with self.assertRaises(AppError) as ctx:
+            check_probe(probe)
+        self.assertIn("3 minutes", str(ctx.exception))
+        self.assertIn("trim", str(ctx.exception).lower())
+
+    def test_keyframe_plan_scales_with_duration(self):
+        from video import keyframe_plan
+        self.assertEqual(keyframe_plan(30000), (3000, 50))
+        self.assertEqual(keyframe_plan(60000), (3000, 50))
+        iv, mx = keyframe_plan(120000)
+        self.assertEqual(mx, 24)
+        self.assertGreaterEqual(iv, 5000)
+        iv, mx = keyframe_plan(180000)
+        self.assertEqual(mx, 24)
+        self.assertGreaterEqual(iv, 5000)
+
+    def test_output_cap_grows_with_duration(self):
+        from providers import output_cap_for
+        self.assertEqual(output_cap_for(30000), 8000)
+        self.assertEqual(output_cap_for(60000), 8000)
+        self.assertEqual(output_cap_for(120000), 12000)
+        self.assertEqual(output_cap_for(180000), 16000)
+
+    def test_synth_120s_180s_mock_pass_and_181s_rejected(self):
+        import shutil
+        import subprocess
+        from cli import parser, run
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("ffmpeg missing")
+        for secs, ok in ((120, True), (180, True), (181, False)):
+            clip = self.base / f"synth-{secs}.mp4"
+            subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi",
+                            "-i", f"testsrc=size=96x72:rate=5:duration={secs}",
+                            "-c:v", "libx264", "-preset", "ultrafast", str(clip)],
+                           check=True, timeout=120)
+            args = parser().parse_args([str(clip), "--workspace-path", str(APP_DIR),
+                                        "--provider", "mock",
+                                        "--out", str(self.base / f"o-{secs}")])
+            if ok:
+                run(args)
+                self.assertTrue((self.base / f"o-{secs}" / "operations.json").is_file())
+            else:
+                with self.assertRaises(AppError) as ctx:
+                    run(args)
+                self.assertIn("3 minutes", str(ctx.exception))
 
     def test_source_frame_comes_from_decoder_n_and_pts(self):
         log = """[showinfo@source @ 0x1] n: 0 pts: 50 pts_time:0.05 other: 1
@@ -132,7 +185,7 @@ irrelevant log line
         doc["steps"][0].update(source_frame_refs=["frame-000001", "frame-000003"])
         with self.assertRaises(AppError):
             validate_operations(doc, self.schema, manifest, self.base)
-        doc, repaired = repair_frame_refs(doc, manifest)
+        doc, repaired, _ = repair_frame_refs(doc, manifest)
         self.assertEqual(repaired, ["observe"])
         self.assertEqual(doc["steps"][0]["source_frame_refs"], ["frame-000001"])
         self.assertTrue(doc["steps"][0]["evidence"].startswith("needs_review"))
@@ -145,7 +198,7 @@ irrelevant log line
         doc["steps"][0].update(start_ms=2000, end_ms=3000,
                                source_frame_refs=["frame-000001", "frame-000002"])
         del doc["steps"][1]
-        doc, repaired = repair_frame_refs(doc, manifest)
+        doc, repaired, _ = repair_frame_refs(doc, manifest)
         self.assertEqual(repaired, ["observe"])
         self.assertEqual(doc["steps"][0]["source_frame_refs"], ["frame-000002"])
         self.assertTrue(doc["steps"][0]["evidence"].startswith("needs_review"))
@@ -162,6 +215,47 @@ irrelevant log line
         doc["steps"][0].update(start_ms=-50, end_ms=1000)
         doc, clamped = clamp_document(doc, manifest)
         self.assertEqual(doc["steps"][0]["start_ms"], 0)
+
+    def test_apply_shot_candidates_rewrites_start(self):
+        from validation import apply_shot_candidates
+        _, doc = self.fixture(self.base)
+        cands = [{"id": 0, "t_ms": 1400}, {"id": 1, "t_ms": 6333}]
+        doc["steps"][0].update(start_ms=1000,
+                               evidence="[trans:1] typing appears")
+        doc["steps"][1].update(evidence="no marker here")
+        doc, aligned = apply_shot_candidates(doc, cands)
+        self.assertEqual(doc["steps"][0]["start_ms"], 6333)
+        self.assertEqual(aligned, [doc["steps"][0]["id"]])
+        # Unknown id flags the step instead of rewriting.
+        doc["steps"][0].update(evidence="already aligned, no marker")
+        doc["steps"][1].update(evidence="[trans:9] guess")
+        doc, aligned = apply_shot_candidates(doc, cands)
+        self.assertTrue(doc["steps"][1]["evidence"].startswith("needs_review"))
+        self.assertEqual(aligned, [])
+
+    def test_repair_keeps_frame_within_one_sample_interval(self):
+        # Real case: S2 web-20261104T013132Z step 41000-54000 cited
+        # frame-000041 @40.1s; the model reads frame-NN as second NN.
+        # Within one sample interval of the boundary -> keep, no needs_review.
+        from validation import repair_frame_refs
+        manifest, doc = self.fixture(self.base)
+        manifest["video_fps"] = "30/1"
+        manifest["sample_interval_ms"] = 1000
+        manifest["frames"] = [
+            {"id": "frame-000041", "file": "x.jpg", "image_sha256": "c" * 64,
+             "source_frame": 1203, "pts": 40100, "sample_time_ms": 40100}]
+        doc["steps"] = [dict(doc["steps"][0], id="s41", start_ms=41000,
+                             end_ms=54000, source_frame_refs=["frame-000041"],
+                             evidence="saw it")]
+        doc, repaired, _ = repair_frame_refs(doc, manifest)
+        self.assertEqual(repaired, [])
+        self.assertEqual(doc["steps"][0]["source_frame_refs"], ["frame-000041"])
+        self.assertNotIn("needs_review", doc["steps"][0]["evidence"])
+        # Truly far refs are still dropped and flagged.
+        doc["steps"][0].update(start_ms=60000, end_ms=70000)
+        doc, repaired, _ = repair_frame_refs(doc, manifest)
+        self.assertEqual(repaired, ["s41"])
+        self.assertTrue(doc["steps"][0]["evidence"].startswith("needs_review"))
 
     def test_video_kind_gate_empty_steps_rules(self):
         manifest, doc = self.fixture(self.base)
@@ -447,6 +541,18 @@ irrelevant log line
             self.assertNotIn("secret=", str(error.exception))
         with self.assertRaises(AppError):
             plan_payload(doc, manifest, "relative/workspace")
+
+    def test_plan_payload_follows_ui_language(self):
+        from navide import plan_payload
+        manifest, doc = self.fixture(self.base)
+        en = plan_payload(doc, manifest, str(APP_DIR))
+        self.assertIn("Video operation concepts", en["name"])
+        zh = plan_payload(doc, manifest, str(APP_DIR), "zh-Hant")
+        self.assertIn("影片操作概念", zh["name"])
+        for lang in ("en", "zh-Hant", "zh-Hans", "ja", "es"):
+            p = plan_payload(doc, manifest, str(APP_DIR), lang)
+            self.assertTrue(p["name"] and p["overview"])
+            self.assertIn("pending", p["todos"][0]["status"])
 
 
 if __name__ == "__main__":

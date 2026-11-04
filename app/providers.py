@@ -119,11 +119,20 @@ def parse_meta_response(body):
     return document, saved_usage
 
 
-PROMPT_VERSIONS = ("v1", "v2", "v3", "v4", "v5", "v6", "v6-speech", "v7", "v8", "v9")
+PROMPT_VERSIONS = ("v1", "v2", "v3", "v4", "v5", "v6", "v6-speech", "v7", "v8", "v9", "v10", "v11")
 
 
 def sanitize_hint(task_hint):
     return " ".join(str(task_hint or "").split())[:200]
+
+
+def output_cap_for(duration_ms):
+    """max_output_tokens scaled by duration; short videos keep 8000."""
+    if duration_ms <= 60000:
+        return 8000
+    if duration_ms <= 120000:
+        return 12000
+    return 16000
 
 
 def build_desc_prompt(manifest):
@@ -149,7 +158,7 @@ def remote_schema_for(schema, version):
     """
     out = copy.deepcopy(schema)
     props = out["properties"]
-    if version in ("v6", "v6-speech", "v7", "v8", "v9"):
+    if version in ("v6", "v6-speech", "v7", "v8", "v9", "v10", "v11"):
         out["required"] = list(props)
         for step in [out["properties"]["steps"]["items"]]:
             step["required"] = list(step["properties"])
@@ -185,13 +194,13 @@ def build_prompt(version, manifest, task_hint=""):
         "Reference only supplied sample IDs whose sample_time_ms falls inside that step's [start_ms,end_ms). "
         "Use explicit uncertainty in the five strings when evidence is unclear. Do not invent steps. "
         "Use conservative visual part names when ambiguous (for example, small round part); "
-        + ("do not assume a small round part is a nut. " if version in ("v2", "v3", "v4", "v5", "v6", "v6-speech", "v7", "v8", "v9")
+        + ("do not assume a small round part is a nut. " if version in ("v2", "v3", "v4", "v5", "v6", "v6-speech", "v7", "v8", "v9", "v10", "v11")
            else "do not assume a washer is a nut. ")
         + "Time intervals are approximate observation windows, not proof of exact completion. "
         "The done field must state a visible completion criterion and say unverified when completion is not shown. "
         "Keep concept strings concise and group continuous motions into meaningful steps. "
     )
-    if version in ("v2", "v3", "v4", "v5", "v6", "v6-speech", "v7", "v8", "v9"):
+    if version in ("v2", "v3", "v4", "v5", "v6", "v6-speech", "v7", "v8", "v9", "v10", "v11"):
         prompt += (
             "Cut a new step whenever the gripper opens or closes, or an object leaves or arrives at a place; "
             "one grasp and one place each count as one step; entry and exit may merge into adjacent steps. "
@@ -208,18 +217,18 @@ def build_prompt(version, manifest, task_hint=""):
             "When quoting on-screen text, copy only words that appear verbatim on screen; "
             "if text is unclear write unreadable; never guess synonyms or paraphrases for UI labels. "
         )
-    if version in ("v4", "v5", "v6", "v6-speech", "v7", "v8", "v9"):
+    if version in ("v4", "v5", "v6", "v6-speech", "v7", "v8", "v9", "v10", "v11"):
         prompt += (
             "Each click and each visible state flip is its own step; never merge two actions "
             "that move in opposite directions (for example check then uncheck, open then close) "
             "into one step. "
         )
-    if version in ("v5", "v6", "v6-speech", "v7", "v8", "v9"):
+    if version in ("v5", "v6", "v6-speech", "v7", "v8", "v9", "v11"):
         prompt += (
             "Step boundaries must be exact multiples of 1000 ms (0, 1000, 2000, ...); "
             "never use values like 3601 or 6999. "
         )
-    if version in ("v6", "v6-speech", "v7", "v8", "v9"):
+    if version in ("v6", "v6-speech", "v7", "v8", "v9", "v10", "v11"):
         prompt += (
             "First decide video_kind: procedural (someone doing a task step by step), "
             "non_procedural (scenery, talking head, music, gameplay, anything without a task), "
@@ -229,7 +238,7 @@ def build_prompt(version, manifest, task_hint=""):
             "proc_start_ms and proc_end_ms; otherwise set them to 0 and the source duration. "
             "If uncertain, still split steps. "
         )
-    if version in ("v6", "v7", "v8", "v9"):
+    if version in ("v6", "v7", "v8", "v9", "v10", "v11"):
         prompt += (
             "Ignore the audio track; always return speech with status none and an empty "
             "turns array, and leave speech_refs empty. "
@@ -259,11 +268,37 @@ def build_prompt(version, manifest, task_hint=""):
                    "text ONLY from this table, verbatim; if a word is not in the table, "
                    "write unreadable instead of guessing. Table: "
                    + json.dumps(manifest["desc_table"], ensure_ascii=False) + " ")
+    if version == "v11":
+        prompt += (
+            "Do not split what is really one thing: a single continuous action "
+            "(welding, stirring, one machine cycle), a loop repeating the "
+            "same motion, several people doing different things in parallel with "
+            "no shared sequence, or a scripted ad/story that is not teaching a "
+            "task. For those, either judge video_kind uncertain with at most one "
+            "step, or non_procedural with no steps; never invent sub-steps to "
+            "fill time. When in doubt between splitting and holding back, hold back. "
+        )
+    if version == "v10" and manifest.get("shot_candidates"):
+        prompt += ("A local pixel-difference scan found these candidate visual "
+                   "transitions (id and exact t_ms): "
+                   + json.dumps(manifest["shot_candidates"], ensure_ascii=False)
+                   + " Start every step's evidence with the matching candidate as "
+                   "[trans:ID] (for example [trans:0]); the step start time is set "
+                   "from that candidate, so report start_ms in exact milliseconds, "
+                   "never rounded to whole seconds. Cursor wiggles and hover flicker "
+                   "appear as candidates too: only cite a candidate when a real "
+                   "action transition is visible there. If a visible transition has "
+                   "no candidate, write [trans:new] plus your millisecond estimate. ")
     prompt += (
         "Return schema_version=1.0 and copy this source unchanged: "
         + json.dumps(manifest["source"], ensure_ascii=False)
-        + ". Available frame references (images are for local traceability; the attached MP4 is the model input): "
-        + json.dumps([{k: f[k] for k in ("id", "sample_time_ms", "source_frame", "pts")} for f in manifest["frames"]])
+        + ". Available frame references (images are for local traceability; the attached MP4 is the model input). "
+        "Frame ids are labels, not timestamps: frame-000041 is the frame at t=40.1s, NOT second 41; "
+        "always read each frame's t_s below. "
+        + json.dumps([{"id": f["id"], "t_s": round(f["sample_time_ms"] / 1000, 3),
+                       "sample_time_ms": f["sample_time_ms"],
+                       "source_frame": f["source_frame"], "pts": f["pts"]}
+                      for f in manifest["frames"]])
     )
     return prompt
 
@@ -370,9 +405,10 @@ class MetaProvider:
         if sha256(video_path) != manifest["source"]["video_sha256"]:
             raise AppError("Original MP4 changed before upload.")
         prompt = build_prompt(self.prompt_version, manifest, self.task_hint)
+        cap = output_cap_for(manifest["source"]["duration_ms"])
         previous_logging = logging.root.manager.disable
         logging.disable(logging.CRITICAL)
-        diagnostics = {"provider": "meta", "mock": False, "model": self.model, "max_output_tokens": 8000, "reasoning_effort": "low",
+        diagnostics = {"provider": "meta", "mock": False, "model": self.model, "max_output_tokens": cap, "reasoning_effort": "low",
                          "prompt_version": self.prompt_version, "task_hint": self.task_hint or None}
         try:
             # No retries or redirects. Upload the original bytes, preserving audio.
@@ -401,7 +437,7 @@ class MetaProvider:
                     "input": [{"type": "message", "role": "user", "content": content}],
                     "text": {"format": {"type": "json_schema", "name": "operation_steps",
                                         "schema": remote_schema_for(schema, self.prompt_version), "strict": True}},
-                    "max_output_tokens": 8000, "stream": False, "reasoning": {"effort": "low"},
+                    "max_output_tokens": cap, "stream": False, "reasoning": {"effort": "low"},
                 }
                 if self.temperature is not None:
                     body["temperature"] = self.temperature
@@ -432,6 +468,6 @@ class MetaProvider:
         return document, {"provider": "meta", "mock": False, "model": self.model, "usage": usage,
                           "upload_http_status": upload.status_code, "response_http_status": response.status_code,
                           "response_status": response_body["status"],
-                          "reasoning_effort": "low", "max_output_tokens": 8000,
+                          "reasoning_effort": "low", "max_output_tokens": cap,
                           "prompt_version": self.prompt_version, "task_hint": self.task_hint or None,
                           "notice": "Original MP4 uploaded with audio intact when present; human review required."}

@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
-from eval import match_events  # noqa: E402
+from eval import gt_tolerance_ms, match_events  # noqa: E402
 from vote import merge_runs  # noqa: E402
 
 
@@ -23,6 +23,29 @@ def step(sid, start, end, action="do x"):
 
 
 class RulerTests(unittest.TestCase):
+    def test_tolerance_reads_field_then_method_text_then_default(self):
+        # Synthetic only; heldout2 GTs are never opened during tuning.
+        self.assertEqual(gt_tolerance_ms({"tolerance_ms": 2500}), 2500)
+        self.assertEqual(gt_tolerance_ms({"tolerance_s": 2.5}), 2500)
+        self.assertEqual(gt_tolerance_ms({"tolerance": 1.5}), 1500)
+        self.assertEqual(
+            gt_tolerance_ms({"annotation_method": "Eyeballed; tolerance ±2.0s for scoring"}), 2000)
+        self.assertEqual(gt_tolerance_ms({}), 1000)
+
+    def test_a2_style_pass_rule_range(self):
+        # Synthetic mirror of the A2 contract: 0 steps + uncertain/non_proc,
+        # or procedural 1-3 steps PASS; 5+ steps FAIL.
+        from eval import apply_pass_rule
+        rule = {"type": "kind_or_max_steps",
+                "accept_kinds_with_zero_steps": ["uncertain", "non_procedural"],
+                "procedural_max_steps": 3, "fail_if_steps_ge": 5}
+        self.assertEqual(apply_pass_rule(rule, "uncertain", 0), "PASS")
+        self.assertEqual(apply_pass_rule(rule, "non_procedural", 0), "PASS")
+        self.assertEqual(apply_pass_rule(rule, "procedural", 1), "PASS")
+        self.assertEqual(apply_pass_rule(rule, "procedural", 3), "PASS")
+        self.assertEqual(apply_pass_rule(rule, "procedural", 5), "FAIL")
+        self.assertEqual(apply_pass_rule(rule, "procedural", 0), "FAIL")
+
     def test_point_gt_symmetric_start_rule(self):
         gt = [{"id": "GT1", "start_ms": 1366, "end_ms": 1400}]
         # Step starting 634ms late hits (old ruler: miss for lack of overlap).

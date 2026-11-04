@@ -31,6 +31,21 @@ def load_run(run_dir):
     return ops, meta
 
 
+def gt_tolerance_ms(gt):
+    """Tolerance in ms: tolerance_ms, tolerance_s, or tolerance (seconds),
+    else parsed from annotation_method's "tolerance ±Xs", else 1000."""
+    if "tolerance_ms" in gt:
+        return int(gt["tolerance_ms"])
+    for key in ("tolerance_s", "tolerance"):
+        if key in gt:
+            return int(round(float(gt[key]) * 1000))
+    match = re.search(r"tolerance\s*±\s*([\d.]+)\s*s",
+                      str(gt.get("annotation_method", "")))
+    if match:
+        return int(round(float(match.group(1)) * 1000))
+    return TOL_MS
+
+
 def gt_steps_of(gt):
     """Accept ms intervals, second intervals (start_s/end_s), or point events."""
     if gt.get("steps"):
@@ -107,7 +122,7 @@ def main():
     gt = json.loads(Path(args.gt).read_text())
     steps = ops.get("steps", [])
     gt_steps = gt_steps_of(gt)
-    tol_ms = int(gt.get("tolerance_ms", TOL_MS))
+    tol_ms = gt_tolerance_ms(gt)
     hits, merges, splits = match_events(steps, gt_steps, tol_ms)
     # Keyword/hallucination matching excludes the source block: video file
     # names (wok-dev.mp4, chicken-rice.mp4) must not score free hits (Fable A6).

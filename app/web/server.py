@@ -305,6 +305,11 @@ def parse_multipart(body, boundary):
     return fields, files
 
 
+def mid_ref(refs):
+    """Middle cited frame: more representative than the step's first frame."""
+    return refs[len(refs) // 2]
+
+
 def frame_file_for(run_dir, ref_id):
     for cand in sorted((run_dir / "frames").glob(f"*{ref_id}.jpg")):
         if FRAME_RE.match(cand.name):
@@ -513,10 +518,6 @@ def probe_video(path):
             "audio_codec": (str(a.get("codec_name", "?")).lower() if a else None),
             "duration": dur, "vfr": bool(vfr),
             "format": str(info.get("format", {}).get("format_name", "?")).split(",")[0]}
-
-
-def _ffprobe_ok(path):
-    return probe_video(path) is not None
 
 
 def _needs_transcode(path, probed):
@@ -1053,12 +1054,14 @@ JOB_TMPL = """<!doctype html><html lang="{lang}"><head><meta charset="utf-8">
 var NAMES=["Checking video","Extracting frames","Sending to Muse Spark","Model analyzing","Validating steps","Writing manual","Done"];
 var IDX={{}};NAMES.forEach(function(n,i){{IDX[n]=i;}});
 var shown=0,t0=Date.now(),finale=false,filmSeen={{}};
+var LONGNOTE="{t[long_video_note]}";
 function tick(){{document.getElementById("elapsed").textContent=((Date.now()-t0)/1000).toFixed(1)+"s";}}
 setInterval(tick,200);
 function detailFor(k,j,prov){{var d=j.detail||{{}};
   if(k===0){{var p=[];if(d.duration_s!=null)p.push(d.duration_s+" s");if(d.resolution)p.push(d.resolution);if(d.sha12)p.push("sha "+d.sha12);
     var pre=d.converted_from?("Converted from "+d.converted_from+" to MP4 (H.264) · "):"";
-    return pre+(j.video_name||"video")+(p.length?" · "+p.join(" · "):" · reading file…");}}
+    var note="";if(d.duration_s>60){{note=" · ⚠ "+LONGNOTE.replace("{{s}}",d.duration_s).replace("{{e}}",(d.duration_s*0.002).toFixed(2));}}
+    return pre+(j.video_name||"video")+(p.length?" · "+p.join(" · "):" · reading file…")+note;}}
   if(k===1){{if(d.sample_total)return "Sampled "+d.sample_total+" frames"+(d.sample_times_s&&d.sample_times_s.length?" at "+d.sample_times_s.join(", ")+" … s":"");
     if(d.frame_count)return d.frame_count+" frames so far";return "Waiting for frames…";}}
   if(k===2){{return prov==="meta"?"Uploading original MP4 to api.meta.ai ("+(j.model||"Muse Spark")+")":"Using the built-in fixture (no model call)";}}
@@ -1410,7 +1413,7 @@ def beforeafter_html(t):
             refs = s.get("source_frame_refs", [])
             if not refs:
                 return ""
-            fn = "meta-" + refs[0] + ".jpg"
+            fn = "meta-" + mid_ref(refs) + ".jpg"
             if not (d / "frames" / fn).is_file():
                 return ""
             thumbs.append((fn, s.get("id", "?"),
@@ -1702,7 +1705,7 @@ class Handler(BaseHTTPRequestHandler):
             refs = s.get("source_frame_refs", [])
             img = ""
             if refs:
-                fn = frame_file_for(d, refs[0])
+                fn = frame_file_for(d, mid_ref(refs))
                 if fn:
                     img = f"<img alt=\"step {i} frame\" src=\"/frames/{esc(d.name)}/{esc(fn)}\" loading=\"lazy\">"
             nr = f" <span class=\"nrbadge\">{t['needs_review']}</span>" if str(s.get("evidence") or "").startswith("needs_review") else ""
@@ -1723,7 +1726,7 @@ class Handler(BaseHTTPRequestHandler):
             refs = s.get("source_frame_refs", [])
             img = ""
             if refs:
-                fn = frame_file_for(d, refs[0])
+                fn = frame_file_for(d, mid_ref(refs))
                 if fn:
                     img = (f"<img alt=\"\" src=\"/frames/{esc(d.name)}/{esc(fn)}\" loading=\"lazy\">")
             plain = (c.get("done") or c.get("action") or "?").strip()
@@ -1845,8 +1848,14 @@ class Handler(BaseHTTPRequestHandler):
             video.write_bytes(data)
         else:
             return self.send_html("<h1>Upload a file</h1>", 400)
-        if not _ffprobe_ok(video):
+        probed = probe_video(video)
+        if probed is None:
             return self.send_html(f"<h1>Not a video file</h1><p>{NOT_VIDEO_MSG}</p>", 400)
+        if probed["duration"] > 180:
+            return self.send_html(
+                "<h1>Video too long</h1><p>This video is about {:.0f} seconds, over the "
+                "3 minutes / 100 MB limit. Please trim it shorter and upload again.</p>".format(
+                    probed["duration"]), 400)
         if provider == "mock" and not mock_fixture_matches(video):
             return self.send_html("<h1>Fixture does not match this video (mock supports only the synthetic clip)</h1>", 400)
         if provider == "meta":

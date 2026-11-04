@@ -12,8 +12,8 @@ import sys
 from common import AppError, read_json, write_json
 from navide import plan_payload, submit_plan
 from providers import MetaProvider, MockProvider
-from validation import clamp_document, repair_frame_refs, validate_operations
-from video import extract, extract_keyframes
+from validation import apply_shot_candidates, clamp_document, repair_frame_refs, validate_operations
+from video import detect_shot_candidates, extract, extract_keyframes, keyframe_plan
 
 APP_DIR = Path(__file__).resolve().parent
 
@@ -64,9 +64,15 @@ def run(args):
             raise AppError("--two-stage is only valid with --provider meta.")
         use_kf = (args.keyframes or args.two_stage) and args.provider == "meta"
         if use_kf:
-            manifest["keyframes"] = extract_keyframes(Path(args.video).resolve(), out, manifest, interval_ms=args.kf_interval_ms, max_frames=50, mode=args.kf_mode)
+            plan_iv, plan_max = keyframe_plan(manifest["source"]["duration_ms"])
+            manifest["keyframes"] = extract_keyframes(Path(args.video).resolve(), out, manifest, interval_ms=args.kf_interval_ms or plan_iv, max_frames=50 if args.kf_interval_ms else plan_max, mode=args.kf_mode)
             provider.keyframe_dir = out
             provider.keyframes = True
+        if args.shot_candidates and args.prompt_version != "v10":
+            raise AppError("--shot-candidates requires --prompt-version v10.")
+        if args.shot_candidates:
+            manifest["shot_candidates"] = detect_shot_candidates(Path(args.video).resolve())
+            write_json(out / "candidates.json", manifest["shot_candidates"])
         write_json(out / "frames.json", manifest)
         if args.two_stage:
             if args.prompt_version != "v8":
@@ -77,16 +83,22 @@ def run(args):
             manifest["desc_table"] = table.get("frames", [])
         document, metadata = provider.generate(Path(args.video).resolve(), manifest, schema)
         write_json(out / "provider-result.json", {"source": source, "metadata": metadata, "response": document})
+        if args.shot_candidates:
+            document, aligned = apply_shot_candidates(document, manifest["shot_candidates"])
+            if aligned:
+                write_json(out / "aligned.json", {"aligned_step_ids": aligned,
+                           "note": "Step starts rewritten from [trans:ID] markers; see provider-result.json for raw output."})
         document, clamped = clamp_document(document, manifest)
         if clamped:
             write_json(out / "clamped.json", {"clamped_step_ids": clamped,
                        "note": "Boundaries clamped into [0, duration]; see provider-result.json for raw output."})
-        document, repaired = repair_frame_refs(document, manifest)
-        if repaired:
+        document, repaired, forgiven = repair_frame_refs(document, manifest)
+        if repaired or forgiven:
             write_json(out / "repaired.json", {"repaired_step_ids": repaired,
-                       "note": "Out-of-range frame refs dropped; flagged steps carry a needs_review evidence prefix."})
+                       "boundary_tolerance": forgiven,
+                       "note": "Out-of-range frame refs dropped; flagged steps carry a needs_review evidence prefix. Refs within one sample interval are kept as boundary tolerance."})
         validate_operations(document, schema, manifest, out)
-        payload = plan_payload(document, manifest, args.workspace_path)
+        payload = plan_payload(document, manifest, args.workspace_path, args.lang)
         # No task payload or manual exists before both schema and semantic validation pass.
         write_json(out / "operations.json", document)
         (out / "manual.md").write_text(manual(document, manifest), encoding="utf-8")
@@ -112,7 +124,7 @@ def parser():
     result.add_argument("--provider", choices=("mock", "meta"), default="mock")
     result.add_argument("--model", choices=("muse-spark-1.2", "muse-spark-1.3"), default="muse-spark-1.2")
     result.add_argument("--confirm-paid-api", action="store_true", help="Explicitly permit a paid original-MP4 upload and inference")
-    result.add_argument("--prompt-version", choices=("v1", "v2", "v3", "v4", "v5", "v6", "v6-speech", "v7", "v8", "v9"), default="v6")
+    result.add_argument("--prompt-version", choices=("v1", "v2", "v3", "v4", "v5", "v6", "v6-speech", "v7", "v8", "v9", "v10", "v11"), default="v6")
     result.add_argument("--task-hint", default="", help="Short operator hint, naming help only (<=200 chars)")
     result.add_argument("--mock-response", help='JSON fixture with only {"steps": [...]}')
     result.add_argument("--sample-interval-ms", type=int, default=1000)
@@ -121,9 +133,11 @@ def parser():
     result.add_argument("--keyframes", action=argparse.BooleanOptionalAction, default=True,
                         help="Also send full-resolution frames as images (default on; --no-keyframes to disable)")
     result.add_argument("--two-stage", action="store_true", help="Describe keyframes first, then segment with the table (b; two paid calls)")
-    result.add_argument("--kf-interval-ms", type=int, default=3000, help="Keyframe interval in ms (default 3000; UI dense: 500)")
+    result.add_argument("--kf-interval-ms", type=int, default=None, help="Keyframe interval in ms (default: auto by duration, 3000 short / scaled long; UI dense: 500)")
     result.add_argument("--kf-mode", choices=("uniform", "diff"), default="uniform", help="Keyframe sampling: uniform only, or uniform plus scene-change triggers (experiment)")
     result.add_argument("--temperature", type=float, default=None, help="Pass temperature to the model (default None = API default; experiment, e.g. 0)")
+    result.add_argument("--shot-candidates", action="store_true", help="Detect local pixel-difference transition candidates and align v10 step starts to them (F2; requires --prompt-version v10)")
+    result.add_argument("--lang", choices=("en", "zh-Hant", "zh-Hans", "ja", "es"), default="en", help="Navide payload language (default en)")
     return result
 
 

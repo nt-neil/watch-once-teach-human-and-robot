@@ -198,7 +198,7 @@ python3 server.py --port 18766
 # open http://127.0.0.1:18766/ in a browser
 ```
 
-功能：固定 Meta Muse Spark（無 provider 選單）。拖放／點選上傳影片（ffmpeg 能讀的影片格式都支援，不看副檔名，以 ffprobe 讀到影像軌為準，測過：MP4／MOV 含 HEVC／M4V／WebM 含 VP9／MKV／AVI／3GP／TS／MPG／WMV／OGV／GIF／無音軌 MP4；上限 100 MB；非 H.264＋AAC 由本機 ffmpeg 轉碼，不變速不裁切，VFR 轉固定幀率，provenance 記入 transcode.json）→ 可填一句 task-hint（命名輔助，不代看影片）→ 勾白話付費確認 → Analyze（server 端強制每日上限，見 Settings）→ 左右雙欄（手冊＋截圖／操作 JSON，每步附 evidence 可見證據句）→ 匯出（LeRobot 標註／VLA 序列／規劃步驟，見 `export/README.md`，僅標註層）→ Navide payload 預覽（未實連照實標示）→ 歷史 run 瀏覽（只列真推論）。無金鑰時 Analyze 換成 Settings 引導；首頁 hero 有 M1 v2 真推論 before／after 靜態對照（純說明圖，無連結）。等分步驟（各段差 5% 內）標 needs-review 警告，不擋 run。失敗一律白話（401／逾時／斷線／非影片／轉檔失敗皆有對應文案，不卡進度頁）。驗收：tests 93/93（＋1 環境 skip）、sha256 846/846（7 檔預期變動已更新基準）；live e2e 19/19；畫面經 13 輪截圖自評＋真瀏覽器實機操作驗收。
+功能：固定 Meta Muse Spark（無 provider 選單）。拖放／點選上傳影片（ffmpeg 能讀的影片格式都支援，不看副檔名，以 ffprobe 讀到影像軌為準，測過：MP4／MOV 含 HEVC／M4V／WebM 含 VP9／MKV／AVI／3GP／TS／MPG／WMV／OGV／GIF／無音軌 MP4；上限 100 MB／3 分鐘（超過上傳前擋下並給白話建議；長片顯示較慢較貴提示＋預估費用；關鍵幀與輸出上限依時長縮放）；非 H.264＋AAC 由本機 ffmpeg 轉碼，不變速不裁切，VFR 轉固定幀率，provenance 記入 transcode.json）→ 可填一句 task-hint（命名輔助，不代看影片）→ 勾白話付費確認 → Analyze（server 端強制每日上限，見 Settings）→ 左右雙欄（手冊＋截圖／操作 JSON，每步附 evidence 可見證據句）→ 匯出（LeRobot 標註／VLA 序列／規劃步驟，見 `export/README.md`，僅標註層）→ Navide payload 預覽（未實連照實標示）→ 歷史 run 瀏覽（只列真推論）。無金鑰時 Analyze 換成 Settings 引導；首頁 hero 有 M1 v2 真推論 before／after 靜態對照（純說明圖，無連結）。等分步驟（各段差 5% 內）標 needs-review 警告，不擋 run。失敗一律白話（401／逾時／斷線／非影片／轉檔失敗皆有對應文案，不卡進度頁）。驗收：tests 93/93（＋1 環境 skip）、sha256 846/846（7 檔預期變動已更新基準）；live e2e 19/19；畫面經 13 輪截圖自評＋真瀏覽器實機操作驗收。
 
 進度頁（/job/）顯示 7 段白話進度（每段附真實資料：檔名／長度／解析度／SHA、抽幀時刻、驗證細項、費用）＋畫格 filmstrip＋Activity log。reduced-motion 下無動畫。
 
@@ -259,3 +259,21 @@ Claude Code／Muse Code 設定範（`mcpServers`，路徑換成你的 clone）�
 - 已知限制：細粒度裝配合併、外觀相似板件、UI 短事件時間精度、單一連續動作過拆、5 票無增益、SAM 在廣角工作坊不可用。
 
 介面多語系：預設英文，右上角切換繁中／简中／日本語／Español（靜態 `web/i18n/`，日／西為 machine-assisted）；模型產出原文顯示。
+
+## 最終評測（11/4，dev 36 支 / held-out 7 支 / held-out2 10 支）
+
+前提：出貨預設 v6＋keyframes、新量尺（點事件對稱起點、真多數投票、kw 字界）、各 GT 自帶 tolerance。詳 `eval/rounds.md`。
+
+| 組 | 通過（多數決） | 明細 |
+| dev16 舊集 x1 | 7/16 | m1、l3、s003、winter、talk、uib、chicken 過 |
+| pool dev 短 10 x2 | 6 穩過 | R3、H3、H9、N2、N4、P3；H4/H6 擺盪；H7、A1 硬敗（硬拆） |
+| pool dev 長 8 x2 | 4 穩過 | H2、S4、N5、N6；R1/R2 硬拆、H10、P2 敗 |
+| pool S2/P4 x1 | S2 過、P4 2/3 | 長片流程驗證（115s、164.6s） |
+| held-out 7（舊量尺 runs 重算） | 4/7 | l4、wok、postfire、stump 過 |
+| held-out2 10 x3 投票 | 6/10 | R4、H1、H8（投票救回）、P1、N1、N3 過；H5、S1、S3 合併敗；A2 規則敗 |
+
+- UI 選項（非預設）：F2 frame-align（v10＋shot-candidates）＋temperature 0 在 UI 稀疏點擊片最佳（OBS 6/7 x3，證據僅兩支）；phab 反例，只適用稀疏轉換片。
+- 不採用：v11 防硬拆（救 H7/A1 但壓掉 phab/smith）、5 票、兩段式、SAM、diff 關鍵幀。
+- 已知限制：系統性合併（投票救不了）、uncertain 場景硬拆、UI 短事件時間精度。uncertain+1 步語意正確但按凍結 pass_rule 判敗。
+- 上限：up to 3 minutes / 100 MB（超過上傳前擋下，白話建議）。長片關鍵幀 ~24 張、輸出上限提高、進度頁顯示預估費用。
+- frame 修：模型誤讀 frame-NN 為第 NN 秒；prompt 每格標 t_s＋澄清句，repair 對邊界 ±1 sample_interval 內容忍。260 runs 重算 13 筆 needs_review 降到 0，分數不變。

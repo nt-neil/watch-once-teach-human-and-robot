@@ -39,7 +39,7 @@
       "properties": {
         "video_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
         "video_name": {"type": "string", "minLength": 1},
-        "duration_ms": {"type": "number", "exclusiveMinimum": 0, "maximum": 60000},
+        "duration_ms": {"type": "number", "exclusiveMinimum": 0, "maximum": 180000},
         "provider": {"type": "string", "enum": ["mock", "meta"]},
         "mock": {"type": "boolean"},
         "frame_manifest": {"type": "string", "enum": ["frames.json"]}

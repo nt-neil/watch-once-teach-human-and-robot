@@ -8,9 +8,29 @@ from urllib.parse import urlsplit
 from common import AppError
 
 
-def plan_payload(document, manifest, workspace_path):
+NAVIDE_STRINGS = {
+    "en": {"concepts": "Video operation concepts",
+           "overview": "Video → five-field operation concepts → pending todos. Source {name}, SHA256 {sha}. For human review only; not dispatched, not executed, no agentic acceptance.",
+           "review": "Needs human review: the outer layer judges physical/software operation and permission; this todo never auto-dispatches or controls equipment."},
+    "zh-Hant": {"concepts": "影片操作概念",
+           "overview": "影片 → 五欄操作概念 → pending 待辦。來源 {name}，SHA256 {sha}。僅供人檢視，未派工、未執行、未完成 Agentic 驗收。",
+           "review": "待人工檢視：由外層判斷實體/軟體操作與執行權限；此待辦不會自動派工或控制設備。"},
+    "zh-Hans": {"concepts": "视频操作概念",
+           "overview": "视频 → 五栏操作概念 → pending 待办。来源 {name}，SHA256 {sha}。仅供人检视，未派工、未执行、未完成 Agentic 验收。",
+           "review": "待人工检视：由外层判断实体/软件操作与执行权限；此待办不会自动派工或控制设备。"},
+    "ja": {"concepts": "動画操作コンセプト",
+           "overview": "動画 → 5フィールド操作コンセプト → pending タスク。ソース {name}、SHA256 {sha}。人手レビュー専用。未割当・未実行、エージェント検収なし。",
+           "review": "人手レビュー要：物理/ソフトウェア操作と権限は外層が判断。このタスクは自動割当も機器制御もしない。"},
+    "es": {"concepts": "Conceptos de operación del video",
+           "overview": "Video → conceptos de operación de cinco campos → tareas pendientes. Fuente {name}, SHA256 {sha}. Solo revisión humana; sin asignar, sin ejecutar, sin aceptación agéntica.",
+           "review": "Requiere revisión humana: la capa externa juzga la operación física/software y los permisos; esta tarea nunca se autoasigna ni controla equipos."},
+}
+
+
+def plan_payload(document, manifest, workspace_path, lang="en"):
     if not Path(workspace_path).is_absolute():
         raise AppError("External Navide caller requires an absolute --workspace-path.")
+    t = NAVIDE_STRINGS.get(lang, NAVIDE_STRINGS["en"])
     source = document["source"]
     marker = "MOCK fixture" if source["mock"] else "Meta output / human review"
     frames = {f["id"]: f for f in manifest["frames"]}
@@ -23,11 +43,11 @@ def plan_payload(document, manifest, workspace_path):
             + "Source: " + json.dumps(source, ensure_ascii=False) + "\n"
             + f"PTS time_base={manifest['time_base']}; timeline_origin_ms={manifest['timeline_origin_ms']}\n"
             + "Frames: " + json.dumps(refs, ensure_ascii=False) + "\n"
-            + "待人工檢視：由外層判斷實體/軟體操作與執行權限；此待辦不會自動派工或控制設備。"
+            + t["review"]
         )
         todos.append({"id": step["id"], "content": content, "status": "pending"})
-    return {"name": f"[{marker}] 影片操作概念 {source['video_sha256'][:12]}",
-            "overview": f"[{marker}] 影片 → 五欄操作概念 → pending 待辦。來源 {source['video_name']}，SHA256 {source['video_sha256']}。僅供人檢視，未派工、未執行、未完成 Agentic 驗收。",
+    return {"name": f"[{marker}] {t['concepts']} {source['video_sha256'][:12]}",
+            "overview": f"[{marker}] " + t["overview"].format(name=source['video_name'], sha=source['video_sha256']),
             "stage": "draft", "todos": todos, "workspace_path": str(workspace_path)}
 
 

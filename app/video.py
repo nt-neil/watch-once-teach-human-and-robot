@@ -21,6 +21,9 @@ def run_media(command):
     return result
 
 
+MAX_DURATION_S = 180
+
+
 def check_probe(probe):
     streams = probe.get("streams", [])
     videos = [s for s in streams if s.get("codec_type") == "video" and not s.get("disposition", {}).get("attached_pic")]
@@ -35,14 +38,46 @@ def check_probe(probe):
         raise AppError("Source duration is missing or invalid.") from None
     if not all(math.isfinite(d) and d > 0 for d in durations):
         raise AppError("Source duration is missing or invalid.")
-    if max(durations) > 60:
-        raise AppError("Source exceeds 60 seconds; input rejected (no automatic trimming).")
+    if max(durations) > MAX_DURATION_S:
+        raise AppError(f"This video is about {max(durations):.0f} seconds, over the 3 minutes limit. "
+                       "Please trim it shorter and upload again.")
     if "mp4" not in probe.get("format", {}).get("format_name", "").split(","):
         raise AppError("Only a local MP4 is accepted; original MP4 is required for audio upload.")
     return video, max(durations) * 1000, video_duration * 1000
 
 
 FRAME_LOG = re.compile(r"showinfo@(source|sample)\s+@.*?\bn:\s*(\d+)\s+pts:\s*(-?\d+)\s+pts_time:\s*([-+\d.eE]+)")
+
+SCENE_LOG = re.compile(r"pts_time:([-+\d.eE]+)")
+
+
+def detect_shot_candidates(video_path, threshold=0.001):
+    """List visual-transition candidates via pixel difference (F2, local only).
+
+    Runs ffmpeg scene detection over the decoded video and returns
+    [{id, t_ms}] with exact millisecond times. Low threshold on purpose:
+    recall matters, cursor-wiggle false positives are filtered by the
+    model's semantics. Never touches the network.
+    """
+    result = run_media(["ffmpeg", "-hide_banner", "-i", str(video_path),
+                        "-filter:v", f"select='gt(scene,{threshold})',showinfo",
+                        "-vsync", "0", "-f", "null", "-"])
+    cands, seen = [], set()
+    for line in result.stderr.splitlines():
+        if "showinfo" not in line:
+            continue
+        match = SCENE_LOG.search(line)
+        if not match:
+            continue
+        try:
+            t_ms = round(float(match.group(1)) * 1000)
+        except ValueError:
+            continue
+        if t_ms in seen:
+            continue
+        seen.add(t_ms)
+        cands.append({"id": len(cands), "t_ms": t_ms})
+    return cands
 
 
 def parse_samples(log):
@@ -68,6 +103,17 @@ def parse_samples(log):
     if not samples:
         raise AppError("No decoded sample frames; input rejected.")
     return origin, samples
+
+
+def keyframe_plan(duration_ms):
+    """Keyframe (interval_ms, max_frames) scaled by duration.
+
+    Short videos keep the proven dense plan; long videos spread ~24 frames
+    so image tokens stay bounded. Explicit CLI flags still override.
+    """
+    if duration_ms <= 60000:
+        return (3000, 50)
+    return (max(5000, int(duration_ms / 24)), 24)
 
 
 def extract_keyframes(video_path, output_dir, manifest, interval_ms=3000, max_frames=15, mode="uniform"):

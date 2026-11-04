@@ -289,6 +289,139 @@ Old conclusions, re-judged:
 - t0: 3/7, 4/7, 5/7 (mean 4.0, range 3-5), kw 4/4 all. Default-temp v5obs under new ruler: 4/2/6/3/4 (mean 3.8, range 2-6).
 - Verdict n=3: temperature=0 slightly narrows the range (3-5 vs 2-6) at similar mean. API probe: temperature accepted, seed rejected (400). Flag: --temperature (default None = API default). Needs n=5 + effort-medium contrast for a firm claim (11/4).
 - Round spend: 3 paid calls, est $0.1221 + $0.0001 probe. Cumulative iteration: 146 calls, est $3.6976.
+- n=5 completion (11/4): runs 4+5 both 6/7 PASS (miss GT2 only), kw 4/4, med_err 617. Full n=5: 3/7, 4/7, 5/7, 6/7, 6/7 (mean 4.8, range 3-6) vs default-temp 4/2/6/3/4 (mean 3.8, range 2-6). Runs 4/5 byte-identical (operations.json + reasoning 2079 tokens); runs 1/2/3 mutually differ — temp0 reduces variance but is not guaranteed deterministic.
+- Verdict n=5: temperature=0 gains ~+1.0 mean and lifts the floor (3 vs 2) on OBS. Single-video evidence only; needs multi-video + effort-medium contrast before changing the default. NOT merged (flag-only).
+- Round spend: +2 paid calls, est $0.078. Cumulative iteration: 148 calls, est $3.776.
+
+## F2-framealign（零成本驗證，obs.mp4）
+
+- ffmpeg scene th=0.001 全片掃出 13 候選，命中全部 7 GT（誤差<70ms）：recall 7/7；
+  誤報 6 個皆滑鼠／游標：precision 7/13。GT2（6.3s 文字出現）在 0.01／0.05 全漏，
+  0.001 才抓到——閾值必須低，誤報靠模型語意過濾。
+- 設計見 `eval/design-f2-framealign.md`（候選表＋v10 trans_id引用＋毫秒後處理）。
+  實作：prompt v10（flag，schema 不動，evidence 首寫 [trans:ID]，拿掉整秒量化）＋
+  video.detect_shot_candidates＋validation.apply_shot_candidates＋CLI --shot-candidates。
+- 付費驗證 v10＋candidates（新量尺）：OBS 4/7、6/7、4/7（mean 4.7，med_err ~33ms）；
+  uib 4/5、4/5、4/5（全 PASS，kw 3/3）。run2 示範上限：7 步引用 trans:0/1/2/4/8/9/12，
+  6/7 只漏 GT6。時間精度比 v6 整秒大幅改善（33ms vs 600ms+），但合併未解
+  （merges 仍 1-2）：F2 修時間不修合併。OBS 均值與 temp0 相當（4.7 vs 4.8）。
+- Verdict: F2 有效但只治一半；F2＋temp0 合併未測。NOT merged（flag-only）。
+- Round spend: 6 paid calls, in 64866 / out 26552, est $0.194 (under $0.25 estimate).
+  Cumulative iteration: 154 calls, est $3.970.
+
+## longform-180s (60s cap raised to 180s, user: fix the bug for real)
+
+- Core: video.MAX_DURATION_S=180, plain-words over-limit error, keyframe_plan
+  (short keeps 3000ms/50; long spreads ~24 frames, >=5000ms), output_cap_for
+  (8000/12000/16000), schema duration maximum 180000. UI: /analyze rejects
+  >180s before job creation (400 + plain words; 100MB already gated by
+  Content-Length), job page shows long-video note + cost estimate when
+  duration>60s (new i18n key long_video_note, 5 langs), drop_msg adds
+  "up to 3 minutes". README updated. Script v10 mentions no limit (no conflict).
+- Proof runs (v6+kf): pool-S2-1 (115s) 2/2 PASS, 11 steps, $0.130;
+  pool-P4-1 (164.6s) 2/3 (miss GT3 outdoor footage), 11 steps, $0.095;
+  pool-R2-mock PASS flow. P4 re-encoded to 32MB (was 114MB > 100MB gate).
+- Tests: probe 120/180/181s, synth mock 120/180 pass + 181 reject, keyframe
+  plan, output cap, web 181s-upload 400. All green.
+- Round spend: 2 paid calls, est $0.225. Cumulative iteration: 156 calls, est $4.195.
+
+## pool-base (pool dev short 10 clips x2, v6+kf, new ruler)
+
+- Stable PASS (6): R3 2/2 x2, H3 1-step x2, H9 5/5 x2, N2/N4/P3 nonproc 0-step x2.
+- Swing (2): H4 3-step FAIL then 1-step PASS; H6 2/2 PASS then 1/2 merge FAIL.
+- Stable FAIL (2): H7 procedural 3-step x2 (multi-worker scene force-split);
+  A1 procedural 7/8-step x2 (scripted ad force-split; v6 gate leaks on ads
+  with action). A1 is the first procedural/nonproc gate miss beyond stump-style
+  edge cases.
+- Remux note: R3/H9/N4 needed transcode (theora/vp8 not in mp4); R3 duration
+  41.92->41.24s (-0.68s tail, GT unaffected, disclosed). Rest -c copy.
+- Verdict: v6+kf baseline on new shorts: 6/10 stable pass, 2 swing, 2 hard fail.
+  Gate leak (A1) and force-split (H7) are the new failure family, distinct
+  from merge/timing issues.
+- Round spend: 20 paid calls, in 460436 / out 49973, est $0.788.
+  Cumulative iteration: 176 calls, est $4.983.
+
+## pool-long (pool dev long 8 clips x2, v6+kf, new ruler)
+
+- Stable PASS (4): H2 3/3 x2, S4 4/4 x2, N5/N6 nonproc x2 (N5-2 needed 1 retry).
+- Stable FAIL (4): R1 8/9-step x2, R2 11-step x2 (uncertain GTs force-split);
+  H10 1/2 x2 (miss GT2 ground cutting); P2 2/3 x2 (miss GT1 box showcase 0-12s,
+  model starts at 9s unboxing — annotator/model granularity split, GT frozen).
+- Verdict: v6+kf on new longs: 4/8 pass. Same failure family as shorts:
+  uncertain scenes get force-split into many steps instead of uncertain/1-step.
+- Round spend: 16 paid calls, in 829866 / out 55845, est $1.275.
+  Cumulative iteration: 192 calls, est $6.258.
+
+## v11-noforcesplit (v6 + do-not-split rule; pool hard-fail probe + dev16 x1)
+
+- Probe on 4 pool hard fails: H7 nonproc 0-step PASS, A1 nonproc 0-step PASS
+  (both rescued); R1 procedural 4-step FAIL (was 8/9, improved); R2 uncertain
+  1-step FAIL by rule letter (semantically right: whole loop as one step, but
+  pass_rule only accepts uncertain+0 or procedural+1).
+- Dev16 x1 (v11a): 8/16 PASS (m1/l3/s003/winter/talk/uib/chicken/m1b) vs f1
+  v6 7/16. BUT clear harm: phab 0/10 (v6 5/10, judged uncertain+1),
+  smith PASS->FAIL (uncertain), pot60 uncertain. l3 4/4 within swing.
+- Verdict: v11 trades recall for precision — rescues force-split scenes but
+  suppresses real procedurals (phab/smith). Net +1 within noise, harm
+  concentrated. NOT merged. R2 case suggests pass_rule should accept
+  uncertain+1 (GT call, frozen for now).
+- Round spend: 20 paid calls, in 418035 / out 50952, est $0.739.
+  Cumulative iteration: 212 calls, est $6.997.
+
+## f2t0-combo (v10+candidates+temp0; OBS x3, uib x2)
+
+- OBS: 6/7, 6/7, 6/7 ALL PASS (merges 0/0/1, med_err ~34ms). Stacks cleanly:
+  default-temp v6 3.8 < temp0 4.8 ~= F2 4.7 < F2+temp0 6.0.
+- uib: 4/5, 4/5 (same as F2 alone; GT2 text-onset still missed). No extra gain
+  beyond F2 ceiling on this clip.
+- Verdict: best UI-short combo so far, but 2-clip evidence only. Candidate for
+  held-out2 default alongside v6+kf+vote; needs multi-clip confirmation.
+- Round spend: 5 paid calls, in 60400 / out 28146, est $0.195.
+  Cumulative iteration: 217 calls, est $7.192.
+- Boundary (phab probe): 287 candidates on continuous browsing/scroll footage;
+  F2+temp0 4/10 BELOW v6 5/10. F2 only fits sparse-transition clips (UI clicks);
+  dense-change footage drowns the candidate list. +1 call ~$0.04.
+  Cumulative iteration: 218 calls, est $7.23.
+
+## heldout2-final (frozen GT x10, v6+kf, 3 runs + strict-majority vote each)
+
+Setup: clips remuxed to mp4 (R4/H5/H1/H8/P1/N3/A2 -c copy; S1/S3/N1
+libx264 crf20+aac, VP8-in-mp4 unsupported). Durations verified ±0.02s.
+GT never opened during tuning; scored once, no cherry-pick.
+
+| clip | run1 | run2 | run3 | majority | verdict |
+| R4 | 4/5 P | 4/5 P | 4/5 P | 4/5 (miss GT3) | PASS |
+| H5 | 3/4 F | 3/4 F | 3/4 F | 3/4 (miss GT4, merge) | FAIL |
+| H1 | 7/7 P | 7/7 P | 7/7 P | 7/7 | PASS |
+| H8 | 3/3 P | 3/3 P | 2/3 F | 3/3 (vote rescue) | PASS |
+| P1 | 5/5 P | 5/5 P | 5/5 P | 5/5 | PASS |
+| S1 | 3/6 F | 3/6 F | 3/6 F | 3/6 (merges=2) | FAIL |
+| S3 | 3/5 F | 3/5 F | 3/5 F | 3/5 (merges=2) | FAIL |
+| N1 | nonproc P | P | P | 0-step | PASS |
+| N3 | nonproc P | P | P | 0-step (1 retry) | PASS |
+| A2 | proc 4-step F | proc 5-step F | proc 5-step F | proc 5-step (rule: 0 or 1-3) | FAIL |
+
+Majority verdict: 6/10 PASS. Failure types: merge (H5/S1/S3, stable across
+runs — voting cannot fix systematic merges), over-split vs pass_rule (A2
+procedural 4-5 steps where the rule allows 0 or 1-3). H8 is the only vote
+rescue. Gate held on N1/N3 (no A1-style ad leak repeated on nonproc pair).
+- Round spend: 30 paid calls, in 743940 / out 84248, est $1.289.
+  Cumulative iteration: 248 calls, est $8.52.
+
+## repair-tolerance (frame-NN off-by-one fix; (a) prompt + (b) repair)
+
+- Cause: model reads frame-000041 as second 41, but it samples t=40.1s; refs
+  ~1s off the boundary were dropped + needs_review. S2 web run: 7/12 steps.
+- Fix (a): frame list now carries t_s per frame + "frame-000041 is the frame
+  at t=40.1s, NOT second 41" (all versions, factual clarification).
+- Fix (b): repair keeps refs within one sample_interval of the boundary,
+  recorded as boundary_tolerance in repaired.json, never flagged. Signature
+  now returns (doc, repaired, forgiven); cli.py + tests updated.
+- Rescore (scripts/rescore_repair.py, read-only): 260 runs, 0 errors,
+  13 improved to 0 needs_review (S2 web 7->0; f2obs-3 3->0; h2-P1-3 3->0;
+  10 more 1->0). Scores unchanged: repair only touches refs and the
+  evidence prefix, never boundaries. heldout2-final scores stand.
+- Spend: $0 (post-processing only). Cumulative iteration: 248 calls, est $8.52.
 
 ## (a)-zoomin (v6 plain re-ask on ±2s subclips, obs/uib)
 

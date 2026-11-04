@@ -51,9 +51,9 @@ class PromptV2Tests(unittest.TestCase):
 
     def test_bad_version_rejected(self):
         with self.assertRaises(AppError):
-            build_prompt("v10", MANIFEST)
+            build_prompt("v12", MANIFEST)
         with self.assertRaises(AppError):
-            MetaProvider("muse-spark-1.2", True, "v10")
+            MetaProvider("muse-spark-1.2", True, "v12")
 
     def test_v6_extends_v5_with_video_kind_gate(self):
         v5 = build_prompt("v5", MANIFEST)
@@ -90,6 +90,35 @@ class PromptV2Tests(unittest.TestCase):
         for chunk in ("gripper opens or closes", "never merge two actions",
                       "exact multiples of 1000 ms", "First decide video_kind"):
             self.assertIn(chunk, v9)
+
+    def test_frame_list_states_ids_are_not_seconds(self):
+        p = build_prompt("v6", MANIFEST)
+        self.assertIn("NOT second 41", p)
+        self.assertIn('"t_s": 0.0', p)
+        self.assertIn('"t_s": 0.0', build_prompt("v1", MANIFEST))
+
+    def test_v11_adds_no_forcesplit_rule_to_v6(self):
+        v6 = build_prompt("v6", MANIFEST)
+        v11 = build_prompt("v11", MANIFEST)
+        self.assertIn("exact multiples of 1000 ms", v11)
+        self.assertIn("First decide video_kind", v11)
+        self.assertIn("Do not split what is really one thing", v11)
+        self.assertIn("repeating the same motion", v11)
+        self.assertNotIn("repeating the same motion", v6)
+        self.assertNotIn("[trans:", v11)
+
+    def test_v10_drops_whole_second_rule_and_cites_transitions(self):
+        v6 = build_prompt("v6", MANIFEST)
+        cands = [{"id": 0, "t_ms": 1400}, {"id": 1, "t_ms": 6333}]
+        v10 = build_prompt("v10", dict(MANIFEST, shot_candidates=cands))
+        self.assertIn("exact multiples of 1000 ms", v6)
+        self.assertNotIn("exact multiples of 1000 ms", v10)
+        for chunk in ("gripper opens or closes", "never merge two actions",
+                      "First decide video_kind"):
+            self.assertIn(chunk, v10)
+        self.assertIn("[trans:0]", v10)
+        self.assertIn("1400", v10)
+        self.assertNotIn("[trans:", v6)
 
     def test_v8_appends_desc_table(self):
         table = [{"kf_id": "kf-000001", "t_s": 8.0, "text_seen": ["Buy milk"], "state": "row visible"}]

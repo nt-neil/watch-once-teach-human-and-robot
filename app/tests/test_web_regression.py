@@ -603,6 +603,25 @@ class WebRegressionTests(unittest.TestCase):
                 WEB.prepare_upload(png)
             self.assertIn("not a video file", str(cm.exception))
 
+    def test_post_over_180s_rejected_before_job(self):
+        import shutil
+        import subprocess
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("ffmpeg not present")
+        with tempfile.TemporaryDirectory() as td:
+            clip = Path(td) / "long.mp4"
+            subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi",
+                            "-i", "testsrc=size=96x72:rate=5:duration=181",
+                            "-c:v", "libx264", "-preset", "ultrafast", str(clip)],
+                           check=True, timeout=120)
+            head, data, started = self._post_analyze(
+                [("provider", "mock")],
+                file_content=clip.read_bytes(), filename="long.mp4")
+        self.assertIn("400", head.splitlines()[0])
+        self.assertIn("Video too long", data.decode())
+        self.assertIn("3 minutes", data.decode())
+        self.assertEqual(started, [])
+
     def test_post_mov_passes_extension_check(self):
         # A non-fixture .mov reaches the mock guard (not the extension gate),
         # proving .mov uploads are accepted at the door.
