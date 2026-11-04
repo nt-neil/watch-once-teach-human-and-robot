@@ -83,6 +83,7 @@ class WebRegressionTests(unittest.TestCase):
         csp = [ln for ln in head.splitlines() if ln.lower().startswith("content-security-policy")]
         self.assertTrue(csp, "CSP header missing")
         self.assertIn("connect-src 'self'", csp[0])
+        self.assertIn("media-src blob:", csp[0])
 
     def test_browser_shaped_post_returns_303_without_spawn(self):
         syn = WEB.RUNS_DIR / "synthetic-fixture.mp4"
